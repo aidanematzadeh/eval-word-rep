@@ -1,93 +1,100 @@
 """
-Load a word2vec model and run the evaluation methods.
+Run the evaluation methods.
 """
-
-import gensim
 import time
 import sys
-import matplotlib.pyplot as plt
-
+import numpy as np
 
 from evaluate import Evaluation
 from process import ProcessData
 import constants as const
 
-def eval_asym():
-    pass
-
-
 if __name__ == "__main__":
-    norm_dir = sys.argv[1]
+    
+    # Read file path for different resources
+    nelson_norms = sys.argv[1]
+    google_path = sys.argv[2]
+    # Path to the list of words that are used in evaluation
+    filter_path = sys.argv[3]
+    
+    # Read the word list that the evaluation is on. These words should occur in
+    # both Nelson norms and Google vectors
+    process = ProcessData()
+    assoc_list = process.read_filter_words(filter_path)
+    print("assoc list", len(assoc_list))
 
-    process_data = ProcessData()
-    norms = process_data.read_norms(norm_dir)
-    tuples = process_data.find_norm_pairs(norms)
-    print "Number of tuples ", len(tuples)
-    print "Done with Nelson norms."
+    word2vec_model = process.load_word2vec_model(google_path)
+    
+    word_list = []
+    for word in assoc_list:
+        if word in word2vec_model:
+            word_list.append(word)
+        else:
+            print("Word not in word2vec", word)
+    print("word list", len(word_list))
 
+
+    norms_fsg = process.read_norms(nelson_norms, word_list)
+    print("norm list", len(norms_fsg))
+    
+    tuples = process.find_norm_pairs(norms_fsg)
+    print("Number of tuples in data", len(tuples))
+    word2vec_cos, word2vec_logcond = process.read_word2vec(word2vec_model, norms_fsg, word_list) 
+    
+    print("Calculating asymmetries")
     evaluate = Evaluation()
+    for stype, scores in [("Norms", norms_fsg), ("Word2Vec Cond", word2vec_logcond)]:
+        scores_ratio, scores_dif = evaluate.find_asymmetry(scores)
     
-    norm_prob_dist_thresh, norm_differences = evaluate.traingle_inequality_threshold(tuples, norms, const.FSG, [0.15, 0.55])
-    filename = "nelson_"
-    for t in norm_prob_dist_thresh:
-        print len(norm_prob_dist_thresh[t])
-        fig = plt.figure()
-        ax = fig.add_subplot(1, 1, 1)
-        plt.hist(norm_prob_dist_thresh[t])
-        ax.set_xlim([0, 0.8])
-        plt.savefig(filename+ str(t) + ".png")
-   
-    print "done"
+        # Sort the asymmetries based on the ratio
+        sorted_ratio = [(key, value) for (value, key) in sorted(zip(scores_ratio.values(), scores_ratio.keys()), reverse=True)]
+        print(stype, sorted_ratio[:10])
+
+        #plt.hist(asym_ratio.values())
+        #fig = plt.gcf()
+        #plt.show()
+
+
+    # Examine whether the traingle inequality holds in Nelson norms
+    thresholds = np.arange(0.05, 0.65, 0.1)
+    norm_prob_dist_thresh, norm_differences = evaluate.traingle_inequality_threshold(tuples, norms_fsg, thresholds)
+    evaluate.plot_traingle_inequality(norm_prob_dist_thresh, "nelson_")
     
-    model = gensim.models.Word2Vec.load_word2vec_format('data/GoogleNews-vectors-negative300.bin', binary=True)
-   
-    print "done loading the model"
-    word2vec_rep = {}
-    for cue in norms:
-        word2vec_rep[cue] = {}
-        for target in norms:
-            word2vec_rep[cue][target] = {}
-            try:
-                word2vec_rep[cue][target][const.COS] = model.similarity(cue, target)
-            except RuntimeError:
-                print cue, target
-    print "done calculating similarities"
+    # Examine whether the triangle inequlaity holds for word2vec using cosine
+    # and conditional probability
+    w2vcos_prob_dist_thresh, w2vcos_differences = evaluate.traingle_inequality_threshold(tuples, word2vec_cos, thresholds)
+    evaluate.plot_traingle_inequality(w2vcos_prob_dist_thresh, "word2vec_cos")
 
-    w2v_prob_dist_thresh, w2v_differences = evaluate.traingle_inequality_threshold(tuples, word2vec_rep, const.cos, [0.15, 0.55])
-    filename = "word2vec_"
-    for t in w2v_prob_dist_thresh:
-        print len(norm_prob_dist_thresh[t])
-        fig = plt.gcf()
-        ax = fig.add_subplot(1, 1, 1)
-        plt.hist(w2v_prob_dist_thresh[t])
-        plt.set_xlim([0, 0.8])
-        plt.savefig(filename + str(t) + ".png")
+    w2vlogcond_prob_dist_thresh, w2vlogcond_differences = evaluate.traingle_inequality_threshold(tuples, \
+    word2vec_logcond, np.arange(0.00035, 0.00045, 0.0002))#np.arange(0.01, 0.3, 0.05))
+    
+    #print("-----", w2vlogcond_prob_dist_thresh)
+    evaluate.plot_traingle_inequality(w2vlogcond_prob_dist_thresh, "word2vec_logcond")
+    
+    
+    # Median rank of associates
+    # Sort the norm associates
+    gold_associates = evaluate.sort_scores(norms_fsg)
 
+    # Sort the word2vec asscociates
+    word2vec_cos_sorted = evaluate.sort_scores(word2vec_cos)
+    word2vec_logcond_sorted = evaluate.sort_scores(word2vec_logcond)
 
     
-
-
-'''
-asym_ratio, asym_dif = Evaluation().find_asymmetry(norms)
-# Sort the asymmetries based on the ratio
-sorted_asym_ratio = [(key, value) for (value, key) in sorted(zip(asym_ratio.values(), asym_ratio.keys()), reverse=True)]
-print sorted_asym_ratio[:10]
-
-plt.hist(asym_ratio.values())
-#plt.title("Gaussian Histogram")
-#plt.xlabel("Value")
-#plt.ylabel("Frequency")
-
-fig = plt.gcf()
-plt.show()
-'''
+    """    
+    for cue in word2vec_cos_sorted:
+        print("cos", cue, word2vec_cos_sorted[cue][:10])
+        print("logcond", cue, word2vec_logcond_sorted[cue][:10])
+        print("norm", cue, gold_associates[cue][:10])
+    """
+    print("Word2Vec, cosine")
+    w2v_cos_ranks = evaluate.calc_median_rank(gold_associates, word2vec_cos_sorted, 10)
+    
+    print("\nWord2Vec, conditional prob")
+    w2v_logcond_ranks = evaluate.calc_median_rank(gold_associates, word2vec_logcond_sorted, 10)
 
 
 
-print "------------------------"
-#instances = Evaluation().triangle_inequality(norms)
-#sorted_instances = [(key, value) for (value, key) in sorted(zip(instances.values(), instances.keys()), reverse=True)]
-#print sorted_instances[:9]
 
 
 
