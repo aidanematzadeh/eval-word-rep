@@ -1,5 +1,5 @@
 """
-Run the evaluation methods.
+Run the context of (Nelson) words from each document and store them.
 """
 import time
 import sys
@@ -16,12 +16,12 @@ import constants as const
 
 
 if __name__ == "__main__":
-    
+
     # Read file path for different resources
     nelson_norms = sys.argv[1]
     one_billion_dir = sys.argv[2]
     context_dir = sys.argv[3]
-    
+
     translator = str.maketrans({key: None for key in string.punctuation})
 
     process = ProcessData()
@@ -31,7 +31,7 @@ if __name__ == "__main__":
     print("norm list", len(norms_fsg))
 
     pr = cProfile.Profile()
-    
+
     wsize = 10 # The size of the context window
     hwsize = wsize//2
 
@@ -50,7 +50,7 @@ if __name__ == "__main__":
             # Adding padding to the beginning of the text
             for i in range(0, hwsize):
                 nodes.append("text_start")
-            
+
             # Removing punctuations
             #print(line)
             line = line.translate(translator)
@@ -64,15 +64,15 @@ if __name__ == "__main__":
 
             for index in range(len(nodes)):
                 node = nodes[index]
-                if not (node in norms): 
+                if not (node in norms):
                     continue
-            
-                #context_word[node].append(' '.join(nodes[index-hwsize:index] + nodes[index+1:index+hwsize+1])) 
-                context_word[node].append(' '.join(nodes[index-hwsize:index+hwsize+1])) 
-            
+
+                #context_word[node].append(' '.join(nodes[index-hwsize:index] + nodes[index+1:index+hwsize+1]))
+                context_word[node].append(' '.join(nodes[index-hwsize:index+hwsize+1]))
+
             if lineno % 10000 == 0:
                 print("got context", lineno)
-        
+
         print("start writing context in file")
         for word in context_word:
             if len(context_word[word]) > 0:
@@ -80,8 +80,7 @@ if __name__ == "__main__":
                 context_file.write('\n'.join(context_word[word]))
                 context_word[word] = []
                 context_file.close()
-        print("writing context was done")    
-        
+        print("writing context was done")
         pr.disable()
         s = StringIO()
         sortby = 'cumulative'
@@ -89,8 +88,6 @@ if __name__ == "__main__":
         ps.print_stats()
         print(s.getvalue())
 
-    
-        
         #break
 
 
