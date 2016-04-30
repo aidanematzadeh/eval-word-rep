@@ -54,17 +54,21 @@ if __name__ == "__main__":
     print("Number of tuples", len(tuples))
     #
     # Examine whether the traingle inequality holds in Nelson norms
-    thresholds = np.arange(0.05, 0.65, 0.1)
+    thresholds = np.arange(0.45, 0.85, 0.1)
     norm_prob_dist_thresh, norm_dif, norm_ratio = evaluate.traingle_inequality_threshold(tuples, norms_fsg, thresholds)
     evaluate.plot_traingle_inequality(norm_prob_dist_thresh, "nelson_")
 
+
     # Examine whether the triangle inequlaity holds for word2vec using cosine
     # and conditional probability
+    thresholds = np.arange(0.65, 1, 0.1)
     w2vcos_prob_dist_thresh, w2vcos_dif, w2vcos_ratio = evaluate.traingle_inequality_threshold(tuples, word2vec_cos, thresholds)
     evaluate.plot_traingle_inequality(w2vcos_prob_dist_thresh, "word2vec_cos")
 
+
+    thresholds = np.arange(0.00035, 0.00051, 0.00005)
     w2vcond_prob_dist_thresh, w2vcond_dif, w2vcond_ratio = evaluate.traingle_inequality_threshold(tuples, \
-    word2vec_cond, np.arange(0.00035, 0.00045, 0.0002))#np.arange(0.01, 0.3, 0.05))
+    word2vec_cond, thresholds)
     evaluate.plot_traingle_inequality(w2vcond_prob_dist_thresh, "word2vec_cond")
 
     rho_te = evaluate.rank_correlation(norm_dif, w2vcond_dif)
@@ -81,28 +85,30 @@ if __name__ == "__main__":
                 w2vcos_ratio[index] < 1:
                     print(tuples[index], norm_ratio[index], w2vcond_ratio[index])
 
-    exit()
 
     # Median rank of associates
     # Sort the norm associates
     gold_associates = evaluate.sort_scores(norms_fsg)
 
     # Sort the word2vec asscociates
-    word2vec_cos_sorted = evaluate.sort_scores(word2vec_cos)
-    word2vec_logcond_sorted = evaluate.sort_scores(word2vec_cond)
+    w2vcos_sorted = evaluate.sort_scores(word2vec_cos)
+    w2vcond_sorted = evaluate.sort_scores(word2vec_cond)
 
 
-    """
-    for cue in word2vec_cos_sorted:
-        print("cos", cue, word2vec_cos_sorted[cue][:10])
-        print("logcond", cue, word2vec_logcond_sorted[cue][:10])
-        print("norm", cue, gold_associates[cue][:10])
-    """
+    #for cue in w2vcos_sorted:
+    #    print("cos", cue, w2vcos_sorted[cue][:10])
+    #    print("logcond", cue, w2vcond_sorted[cue][:10])
+    #    print("norm", cue, gold_associates[cue][:10])
+
     print("Word2Vec, cosine")
-    w2v_cos_ranks = evaluate.calc_median_rank(gold_associates, word2vec_cos_sorted, 10)
+    w2vcos_ranks = evaluate.median_rank(gold_associates, w2vcos_sorted, 10)
+    for rank in w2vcos_ranks:
+        print("median rank associate %d: %.2f", (rank+1, np.median(w2vcos_ranks[rank])))
 
     print("\nWord2Vec, conditional prob")
-    w2v_logcond_ranks = evaluate.calc_median_rank(gold_associates, word2vec_logcond_sorted, 10)
+    w2vcond_ranks = evaluate.median_rank(gold_associates, w2vcond_sorted, 10)
+    for rank in w2vcond_ranks:
+        print("median rank associate %d: %.2f", (rank+1, np.median(w2vcond_ranks[rank])))
 
 
 

@@ -1,16 +1,13 @@
-import math
+#import math
 import scipy.stats
+import matplotlib.pyplot as plt
+import operator
 
 class Evaluation:
     """
     This class implements methods for evulating word representations.
-    Members:
-        Nelson norms --
-
-
-
-
     """
+
     def __init__(self):
         pass
 
@@ -83,16 +80,37 @@ class Evaluation:
         return prob_dist_thresh, differences, ratios
 
 
-    def plot_traingle_inequality(self, dist, filename):
-        pass
+    def plot_traingle_inequality(self, dist, name):
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+        #
+        for thres in dist:
+            print(name, thres, len(dist[thres]))
+            ax.hist(dist[thres], label=str(thres))
+        ax.set_ylim(0, 100)
+        ax.legend()
+        fig.savefig(name)
+
+    def sort_scores(self, scores):
+        sorted_scores = {}
+        for cue in scores:
+            sorted_scores[cue] = sorted(scores[cue].items(), key=operator.itemgetter(1))
+        return sorted_scores
 
 
+    def median_rank(self, gold, scores, n):
+        """ calculate the median rank of the first n associates """
+        ranks = {}
+        for r in range(n):
+            ranks[r] = []
 
-
-
-
-
-
+        for cue in gold:
+            for index in range(min(len(gold[cue]), n)):
+                target = gold[cue][index][0]
+                for j in range(len(scores[cue])):
+                    if scores[cue][j][0] == target:
+                        ranks[index].append(j+1)
+        return ranks
 
 
 
