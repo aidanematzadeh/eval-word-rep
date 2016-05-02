@@ -27,7 +27,7 @@ import re
 from xml.etree.cElementTree import iterparse  # LXML isn't faster, so let's go with the built-in solution
 import multiprocessing
 import os
-#import time
+import time
 from collections import defaultdict
 
 from gensim import utils
@@ -218,6 +218,9 @@ def extract_pages(f, filter_namespaces=False):
     for elem in elems:
         if elem.tag == page_tag:
             title = elem.find(title_path).text
+            if any(title.startswith(ignore + ':') for ignore in IGNORED_NAMESPACES):
+                continue
+
             text = elem.find(text_path).text
 
             ns = elem.find(ns_path).text
@@ -255,6 +258,7 @@ def defaultdict_int():
     return defaultdict(int)
 
 contexts_local = defaultdict(defaultdict_int)
+contexts_clear = False
 
 class GetWordContextWrapper(object):
     def __init__(self, hwsize, wordlist):
@@ -267,6 +271,11 @@ def get_word_context(args, hwsize, wordlist):
     """
     Parse a wikipedia article, return the context of words in word_list as a dictionary
     """
+    global contexts_clear
+    if contexts_clear:
+        contexts_local.clear()
+        contexts_clear = False
+
     text, lemmatize, title, pageid  = args
     if any(title.startswith(ignore + ':') for ignore in IGNORED_NAMESPACES):
         return
@@ -295,15 +304,10 @@ def get_word_context(args, hwsize, wordlist):
     # TODO
 
 def fetch_contexts(x):
+    global contexts_clear
+    contexts_clear = True
     return os.getpid(), contexts_local
 
-def get_word_context_vector(args, contexts, hwsize, wordlist):
-
-    if args is None:
-        return
-    for arg in args:
-        if arg is not None:
-            get_word_context(arg, contexts, hwsize, wordlist)
 
 
 class WikiCorpus(TextCorpus):
@@ -341,6 +345,8 @@ class WikiCorpus(TextCorpus):
         #
         self.wsize = wsize
         self.wordlist = wordlist
+        #pid, cword, w = count
+        self.contexts = defaultdict(lambda: defaultdict(int))
 
         print("lemmatize", self.lemmatize)
         if dictionary is None:
@@ -359,52 +365,51 @@ class WikiCorpus(TextCorpus):
         etc are ignored).
 
         """
+        if len(self.contexts) == 0:
+            print("Calling get_all_contexts")
+            self.get_all_contexts()
+        print("context", len(self.contexts))
+
+        for word, d in self.contexts.items():
+            l = []
+            for cword, count in d.items():
+                l += [cword] * count
+            #print("-->", word, s.getvalue())
+            yield l
+
+    def get_all_contexts(self):
         hwsize = self.wsize//2
         wordlist = self.wordlist
         texts = ((text, self.lemmatize, title, pageid) for title, text, pageid in extract_pages(bz2.BZ2File(self.fname), self.filter_namespaces))
+        self.length = len(wordlist)  # cache corpus length
         pool = multiprocessing.Pool(self.processes)
-
-        #pid, cword, w = count
-        contexts = defaultdict(lambda: defaultdict(int))
-        #
-        print("starting the multiprocessing part")
+        print("starting the multiprocessing part (map)")
         # process the corpus in smaller chunks of docs, because multiprocessing.Pool
         # is dumb and would load the entire input into RAM at once...
-        count = 0
-        for group in utils.chunkize(texts, chunksize=1000 * self.processes, maxsize=1):
-            print("processing", count)
-            #pool.map(lambda x: get_word_context(x, hwsize, wordlist), group, chunksize=100)
-            pool.map(GetWordContextWrapper(hwsize, wordlist), group, chunksize=1000)
-            count += 1
-        #
-
+        index = 0
+        for group in utils.chunkize(texts, chunksize=500 * self.processes, maxsize=1):
+            print("processing", index, len(group), time.time())
+            pool.map(GetWordContextWrapper(hwsize, wordlist), group, chunksize=500)
+            index += 1
+            # combining the contexts
+            if index % 20 == 0:
+                pid_set = set()
+                for pid, contexts_local in pool.imap(fetch_contexts, [1] * self.processes):
+                    assert(pid not in pid_set)
+                    pid_set.add(pid)
+                    for word, d in contexts_local.items():
+                        for cword, count in d.items():
+                            self.contexts[word][cword] += count
+            #if count > 10: break
         pid_set = set()
         for pid, contexts_local in pool.imap(fetch_contexts, [1] * self.processes):
             assert(pid not in pid_set)
             pid_set.add(pid)
             for word, d in contexts_local.items():
                 for cword, count in d.items():
-                    contexts[word][cword] += count
+                    self.contexts[word][cword] += count
         pool.terminate()
 
-        print("context", len(contexts))
-
-        self.length = len(wordlist)  # cache corpus length
-        #print("keys", contexts.keys())
-        #pid_main = list(contexts.keys())[0]
-        #for pid in contexts:
-        #    if pid == pid_main:
-        #        continue
-        #    for word in contexts[pid]:
-        #        for cword in contexts[pid][word]:
-        #            contexts[pid_main][word][cword] += contexts[pid][word][cword]
-        #
-        for word, d in contexts.items():
-            l = []
-            for cword, count in d.items():
-                l += [cword] * count
-            #print("-->", word, s.getvalue())
-            yield l
 
 
     def get_texts_original(self):
