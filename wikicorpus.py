@@ -27,7 +27,8 @@ import re
 from xml.etree.cElementTree import iterparse  # LXML isn't faster, so let's go with the built-in solution
 import multiprocessing
 import os
-
+#import time
+from itertools import zip_longest
 from collections import defaultdict
 from io import StringIO as sio
 
@@ -252,12 +253,12 @@ def process_article(args):
         result = tokenize(text)
     return result, title, pageid
 
-
 def get_word_context(args, contexts, hwsize, wordlist):
     """
     Parse a wikipedia article, return the context of words in word_list as a dictionary
     """
     pid = os.getpid()
+    print("called get_word_context")
     text, lemmatize, title, pageid  = args
     if any(title.startswith(ignore + ':') for ignore in IGNORED_NAMESPACES):
         return
@@ -265,7 +266,7 @@ def get_word_context(args, contexts, hwsize, wordlist):
     text = filter_wiki(text)
     result = []
     for i in range(hwsize):
-        result.append("s-end")
+        result.append(b't-start')
 
     if lemmatize:
         result += utils.lemmatize(text)
@@ -273,17 +274,26 @@ def get_word_context(args, contexts, hwsize, wordlist):
         result += tokenize(text)
 
     for i in range(hwsize):
-        result.append("t-end")
+        result.append(b"t-end")
 
     for index in range(len(result)):
         word = result[index]
-        if "/" in word:
-            word = word.split("/")[0]
-        if not word in wordlist:
+        if not word.decode() in wordlist:
             continue
         for cword in result[index-hwsize:index+hwsize+1]:
             contexts[pid][word][cword] += 1 #.append(' '.join(result[index-hwsize:index+hwsize+1]))
+
+    print("--contexts", len(contexts))
     # TODO
+
+def get_word_context_vector(args, contexts, hwsize, wordlist):
+
+    if args is None:
+        return
+    for arg in args:
+        if arg is not None:
+            get_word_context(arg, contexts, hwsize, wordlist)
+
 
 class WikiCorpus(TextCorpus):
     """
@@ -343,17 +353,25 @@ class WikiCorpus(TextCorpus):
         texts = ((text, self.lemmatize, title, pageid) for title, text, pageid in extract_pages(bz2.BZ2File(self.fname), self.filter_namespaces))
         pool = multiprocessing.Pool(self.processes)
         #pid, cword, w = count
-        contexts = defaultdict(defaultdict(defaultdict(int)))
+        contexts = defaultdict(lambda: defaultdict(lambda: defaultdict(int)))
         #
+        print("starting the multiprocessing part")
         # process the corpus in smaller chunks of docs, because multiprocessing.Pool
         # is dumb and would load the entire input into RAM at once...
-        for group in utils.chunkize(texts, chunksize=10 * self.processes, maxsize=1):
-            pool.imap(lambda x: get_word_context(x, contexts, hwsize, wordlist), group)  # chunksize=10):
-        pool.terminate()
+        count = 0
+        for group in utils.chunkize(texts, chunksize=100 * self.processes, maxsize=1):
+            print("processing", count, len(group))
+            (lambda x: get_word_context(x, contexts, hwsize, wordlist))(group[0])
+            pool.imap(lambda x: get_word_context(x, contexts, hwsize, wordlist), group, chunksize=100)
+            count += 1
+            if count > 2: break
         #
+        pool.terminate()
+        print("context", len(contexts))
 
         self.length = len(wordlist)  # cache corpus length
-        pid_main = contexts.keys()[0]
+        print("keys", contexts.keys())
+        pid_main = list(contexts.keys())[0]
         for pid in contexts:
             if pid == pid_main:
                 continue
@@ -368,7 +386,10 @@ class WikiCorpus(TextCorpus):
             yield s.get_value()
             s.close()
 
-
+    def chunker(self, texts, chunksize):
+        a = zip_longest(*[iter(texts)] * chunksize)
+        b = zip_longest(*[a] * self.processes)
+        return b
 
     def get_texts_original(self):
         """

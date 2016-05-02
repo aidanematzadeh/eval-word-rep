@@ -9,7 +9,7 @@ import pickle
 class ProcessData:
     """ This class reads and process data used for evaluation.
     """
-    def __init__(self, filter_path, google_path, nelson_path, readflag=True):
+    def __init__(self, filter_path=None, google_path=None, nelson_path=None, readflag=True):
         self.word_list = set()
         if not readflag:
             self._calc_scores(filter_path, google_path, nelson_path)
