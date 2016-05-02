@@ -28,9 +28,7 @@ from xml.etree.cElementTree import iterparse  # LXML isn't faster, so let's go w
 import multiprocessing
 import os
 #import time
-from itertools import zip_longest
 from collections import defaultdict
-from io import StringIO as sio
 
 from gensim import utils
 
@@ -253,12 +251,22 @@ def process_article(args):
         result = tokenize(text)
     return result, title, pageid
 
-def get_word_context(args, contexts, hwsize, wordlist):
+def defaultdict_int():
+    return defaultdict(int)
+
+contexts_local = defaultdict(defaultdict_int)
+
+class GetWordContextWrapper(object):
+    def __init__(self, hwsize, wordlist):
+        self.hwsize = hwsize
+        self.wordlist = wordlist
+    def __call__(self, args):
+        get_word_context(args, self.hwsize, self.wordlist)
+
+def get_word_context(args, hwsize, wordlist):
     """
     Parse a wikipedia article, return the context of words in word_list as a dictionary
     """
-    pid = os.getpid()
-    print("called get_word_context")
     text, lemmatize, title, pageid  = args
     if any(title.startswith(ignore + ':') for ignore in IGNORED_NAMESPACES):
         return
@@ -281,10 +289,13 @@ def get_word_context(args, contexts, hwsize, wordlist):
         if not word.decode() in wordlist:
             continue
         for cword in result[index-hwsize:index+hwsize+1]:
-            contexts[pid][word][cword] += 1 #.append(' '.join(result[index-hwsize:index+hwsize+1]))
+            contexts_local[word][cword] += 1 #.append(' '.join(result[index-hwsize:index+hwsize+1]))
 
-    print("--contexts", len(contexts))
+    #print("--contexts", len(contexts_local))
     # TODO
+
+def fetch_contexts(x):
+    return os.getpid(), contexts_local
 
 def get_word_context_vector(args, contexts, hwsize, wordlist):
 
@@ -352,44 +363,49 @@ class WikiCorpus(TextCorpus):
         wordlist = self.wordlist
         texts = ((text, self.lemmatize, title, pageid) for title, text, pageid in extract_pages(bz2.BZ2File(self.fname), self.filter_namespaces))
         pool = multiprocessing.Pool(self.processes)
+
         #pid, cword, w = count
-        contexts = defaultdict(lambda: defaultdict(lambda: defaultdict(int)))
+        contexts = defaultdict(lambda: defaultdict(int))
         #
         print("starting the multiprocessing part")
         # process the corpus in smaller chunks of docs, because multiprocessing.Pool
         # is dumb and would load the entire input into RAM at once...
         count = 0
-        for group in utils.chunkize(texts, chunksize=100 * self.processes, maxsize=1):
+        for group in utils.chunkize(texts, chunksize=1000 * self.processes, maxsize=1):
             print("processing", count, len(group))
-            (lambda x: get_word_context(x, contexts, hwsize, wordlist))(group[0])
-            pool.imap(lambda x: get_word_context(x, contexts, hwsize, wordlist), group, chunksize=100)
+            #pool.map(lambda x: get_word_context(x, hwsize, wordlist), group, chunksize=100)
+            pool.map(GetWordContextWrapper(hwsize, wordlist), group, chunksize=1000)
             count += 1
-            if count > 2: break
         #
+
+        pid_set = set()
+        for pid, contexts_local in pool.imap(fetch_contexts, [1] * self.processes):
+            assert(pid not in pid_set)
+            pid_set.add(pid)
+            for word, d in contexts_local.items():
+                for cword, count in d.items():
+                    contexts[word][cword] += count
         pool.terminate()
+
         print("context", len(contexts))
 
         self.length = len(wordlist)  # cache corpus length
-        print("keys", contexts.keys())
-        pid_main = list(contexts.keys())[0]
-        for pid in contexts:
-            if pid == pid_main:
-                continue
-            for word in contexts[pid]:
-                for cword in contexts[pid][word]:
-                    contexts[pid_main][word][cword] += contexts[pid][word][cword]
+        #print("keys", contexts.keys())
+        #pid_main = list(contexts.keys())[0]
+        #for pid in contexts:
+        #    if pid == pid_main:
+        #        continue
+        #    for word in contexts[pid]:
+        #        for cword in contexts[pid][word]:
+        #            contexts[pid_main][word][cword] += contexts[pid][word][cword]
         #
-        for word, d in contexts[pid_main].items():
-            s = sio()
+        for word, d in contexts.items():
+            l = []
             for cword, count in d.items():
-                s.write((cword + ' ') * count)
-            yield s.get_value()
-            s.close()
+                l += [cword] * count
+            #print("-->", word, s.getvalue())
+            yield l
 
-    def chunker(self, texts, chunksize):
-        a = zip_longest(*[iter(texts)] * chunksize)
-        b = zip_longest(*[a] * self.processes)
-        return b
 
     def get_texts_original(self):
         """
