@@ -372,7 +372,7 @@ class WikiCorpus(TextCorpus):
         # is dumb and would load the entire input into RAM at once...
         count = 0
         for group in utils.chunkize(texts, chunksize=1000 * self.processes, maxsize=1):
-            print("processing", count, len(group))
+            print("processing", count)
             #pool.map(lambda x: get_word_context(x, hwsize, wordlist), group, chunksize=100)
             pool.map(GetWordContextWrapper(hwsize, wordlist), group, chunksize=1000)
             count += 1
