@@ -29,7 +29,8 @@ import multiprocessing
 import os
 import time
 from collections import defaultdict
-
+import numpy
+from stop_words import get_stop_words
 from gensim import utils
 
 # cannot import whole gensim.corpora, because that imports wikicorpus...
@@ -66,6 +67,7 @@ IGNORED_NAMESPACES = ['Wikipedia', 'Category', 'File', 'Portal', 'Template',
                       'MediaWiki', 'User', 'Help', 'Book', 'Draft',
                       'WikiProject', 'Special', 'Talk']
 
+stoplist = set(get_stop_words('en'))
 
 def filter_wiki(raw):
     """
@@ -179,7 +181,7 @@ def tokenize(content):
     """
     # TODO maybe ignore tokens with non-latin characters? (no chinese, arabic, russian etc.)
     return [token.encode('utf8') for token in utils.tokenize(content, lower=True, errors='ignore')
-            if 2 <= len(token) <= 15 and not token.startswith('_')]
+            if 2 <= len(token) <= 15 and not token.startswith('_') and not token in stoplist]
 
 
 def get_namespace(tag):
@@ -257,8 +259,8 @@ def process_article(args):
 def defaultdict_int():
     return defaultdict(int)
 
-contexts_local = defaultdict(defaultdict_int)
 contexts_clear = False
+contexts_local = defaultdict(defaultdict_int)
 
 class GetWordContextWrapper(object):
     def __init__(self, hwsize, wordlist):
@@ -271,10 +273,13 @@ def get_word_context(args, hwsize, wordlist):
     """
     Parse a wikipedia article, return the context of words in word_list as a dictionary
     """
-    global contexts_clear
+    global contexts_clear, contexts_local
     if contexts_clear:
         contexts_local.clear()
+        contexts_local = defaultdict(defaultdict_int)
         contexts_clear = False
+        assert(len(contexts_local) == 0)
+        print('%d context cleared' % os.getpid())
 
     text, lemmatize, title, pageid  = args
     if any(title.startswith(ignore + ':') for ignore in IGNORED_NAMESPACES):
@@ -299,15 +304,13 @@ def get_word_context(args, hwsize, wordlist):
             continue
         for cword in result[index-hwsize:index+hwsize+1]:
             contexts_local[word][cword] += 1 #.append(' '.join(result[index-hwsize:index+hwsize+1]))
-
-    #print("--contexts", len(contexts_local))
     # TODO
 
 def fetch_contexts(x):
-    global contexts_clear
+    global contexts_clear, contexts_local
     contexts_clear = True
+    print('%d fetching context' % os.getpid())
     return os.getpid(), contexts_local
-
 
 
 class WikiCorpus(TextCorpus):
@@ -339,8 +342,9 @@ class WikiCorpus(TextCorpus):
         self.filter_namespaces = filter_namespaces
         self.metadata = False
         if processes is None:
-            processes = max(1, multiprocessing.cpu_count() - 1)
+            processes = max(1, multiprocessing.cpu_count() - 2)
         self.processes = processes
+
         self.lemmatize = lemmatize
         #
         self.wsize = wsize
@@ -371,11 +375,8 @@ class WikiCorpus(TextCorpus):
         print("context", len(self.contexts))
 
         for word, d in self.contexts.items():
-            l = []
-            for cword, count in d.items():
-                l += [cword] * count
             #print("-->", word, s.getvalue())
-            yield l
+            yield (cword for cword, count in d.items() for i in range(count))
 
     def get_all_contexts(self):
         hwsize = self.wsize//2
@@ -389,10 +390,10 @@ class WikiCorpus(TextCorpus):
         index = 0
         for group in utils.chunkize(texts, chunksize=500 * self.processes, maxsize=1):
             print("processing", index, len(group), time.time())
-            pool.map(GetWordContextWrapper(hwsize, wordlist), group, chunksize=500)
+            pool.map(GetWordContextWrapper(hwsize, wordlist), group)#, chunksize=500)
             index += 1
             # combining the contexts
-            if index % 20 == 0:
+            if index % 200 == 0:
                 pid_set = set()
                 for pid, contexts_local in pool.imap(fetch_contexts, [1] * self.processes):
                     assert(pid not in pid_set)
@@ -400,7 +401,8 @@ class WikiCorpus(TextCorpus):
                     for word, d in contexts_local.items():
                         for cword, count in d.items():
                             self.contexts[word][cword] += count
-            #if count > 10: break
+            if index >= 1: break
+        # Can do this better
         pid_set = set()
         for pid, contexts_local in pool.imap(fetch_contexts, [1] * self.processes):
             assert(pid not in pid_set)
@@ -408,9 +410,11 @@ class WikiCorpus(TextCorpus):
             for word, d in contexts_local.items():
                 for cword, count in d.items():
                     self.contexts[word][cword] += count
+
         pool.terminate()
 
-
+        for word in self.contexts:
+            print(word, self.contexts[word][word], len(self.contexts[word]), numpy.sum(self.contexts[word].values()))
 
     def get_texts_original(self):
         """
