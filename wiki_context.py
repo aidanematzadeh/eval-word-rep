@@ -33,7 +33,9 @@ if __name__ == "__main__":
 
     wiki = wikicorpus.WikiCorpus(wikipath, norms, wsize=10) # create word->word_id mapping, takes almost 8h
     wiki.dictionary.filter_extremes(no_below=20, no_above=0.1, keep_n=DEFAULT_DICT_SIZE)
-    # save dictionary and bag-of-words (term-document frequency matrix)
+   #TODO This filtering might remove some of the norms. Experiment with this.
+
+   # save dictionary and bag-of-words (term-document frequency matrix)
     gensim.corpora.MmCorpus.serialize(outpath, wiki, progress_cnt=10000)
     wiki.dictionary.save_as_text(outpath + '_wordids.txt.bz2')
     logger.info("finished running %s" % program)

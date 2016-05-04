@@ -29,7 +29,7 @@ import multiprocessing
 import os
 import time
 from collections import defaultdict
-import numpy
+#import numpy
 from stop_words import get_stop_words
 from gensim import utils
 
@@ -375,7 +375,6 @@ class WikiCorpus(TextCorpus):
         print("context", len(self.contexts))
 
         for word, d in self.contexts.items():
-            #print("-->", word, s.getvalue())
             yield (cword for cword, count in d.items() for i in range(count))
 
     def get_all_contexts(self):
@@ -402,7 +401,7 @@ class WikiCorpus(TextCorpus):
                         for cword, count in d.items():
                             self.contexts[word][cword] += count
             if index >= 1: break
-        # Can do this better
+        #TODO Can do this better
         pid_set = set()
         for pid, contexts_local in pool.imap(fetch_contexts, [1] * self.processes):
             assert(pid not in pid_set)
@@ -413,8 +412,10 @@ class WikiCorpus(TextCorpus):
 
         pool.terminate()
 
-        for word in self.contexts:
-            print(word, self.contexts[word][word], len(self.contexts[word]), numpy.sum(self.contexts[word].values()))
+
+        #for word in self.contexts:
+        #    sumv = numpy.sum(list(self.contexts[word].values()))
+        #    print(word, self.contexts[word][word], len(self.contexts[word]), sumv)
 
     def get_texts_original(self):
         """
