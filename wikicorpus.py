@@ -415,8 +415,8 @@ class WikiCorpus(TextCorpus):
         # process the corpus in smaller chunks of docs, because multiprocessing.Pool
         # is dumb and would load the entire input into RAM at once...
         index = 0
-        chunk_size = 10 * self.processes
-        fetch_frequency = 500000 - 500000 % chunk_size
+        chunk_size = 25 * self.processes
+        fetch_frequency = 2000000 - 2000000 % chunk_size
         for group in utils.chunkize(texts, chunksize=chunk_size, maxsize=1):
             print("processing", index, len(group), time.time())
             pool.map(GetWordContextWrapper(hwsize, wordlist), group)#, chunksize=500)
@@ -424,7 +424,7 @@ class WikiCorpus(TextCorpus):
             # combining the contexts
             if index % fetch_frequency == 0:
                 merge_contexts()
-            if index >= 100000: break
+          #  if index >= 100000: break
         #
         merge_contexts()
         pool.terminate()
