@@ -73,7 +73,7 @@ class ProcessData:
                 except KeyError:
                     print(cue, target)
 
-        #cue w1, target w2, calculating p(w2|w1)
+        #cue w1, target w2, calculating p(w2|w1) that is p(target|cue)
         # log(p(w2|w1)) = log(exp(w2.w1)) - log(sum(exp(w',w1)))
         for cue in norms:
             cue_context = []
@@ -88,6 +88,49 @@ class ProcessData:
                 word2vec_logcond[cue][target] = np.exp(word2vec_cos[cue][target] - p_cue)
 
         return word2vec_cos, word2vec_logcond
+
+    def read_lda(self, ldapath, norms):
+        """ Calculate p(target|cue) = sum_topics{p(target|topic) p(topic|cue)}
+            p(topic|cue) = p(cue|topic)p(topic) / sum_t{p(cue|t) p(t)}
+        """
+        lda = gensim.models.LdaModel.load(ldapath)
+        word2id =  {}
+        for wordid, word in lda.id2word.items():
+            word2id[word] = wordid
+
+        topics =  lda.state.get_lambda()
+        for k in range(len(topics)):
+            topics[k] = topics[k]/topics[k].sum()
+        #TODO do not assume that the topic prob is uniform
+        wordprob = np.zeros(lda.num_terms)
+        #
+        print("----- norms in common", len(set(norms.keys()) & set(word2id.keys())))
+        #
+        for i in range(lda.num_terms):
+            wordprob[i] = np.sum(topics[:,i]) # this should be multiplied with the topic prob
+        count = 0
+        # Need to run the lemmatizer
+        condprob = {}
+        for cue in norms:
+            if not (cue in word2id.keys() or gensim.utils.to_unicode(cue)):
+                continue
+            #print(cue, gensim.utils.to_unicode(cue))
+            #cueid = word2id[ gensim.utils.to_unicode(cue)]
+            cueid = word2id[cue]
+            if not cue in condprob.keys():
+                condprob[cue] = {}
+            #
+            for target in norms[cue]:
+                if not (target in word2id.keys() or gensim.utils.to_unicode(target)):
+                    continue
+                #targetid  = word2id[ gensim.utils.to_unicode(target)]
+                targetid=word2id[target]
+                condprob[cue][target] = 0.0
+                count += 1
+                for k in range(len(topics)):
+                    condprob[cue][target] +=  topics[k][targetid] * (topics[k][cueid] / wordprob[cueid])
+
+        return condprob
 
 
     def read_norms(self, norms_dir, word_list):
@@ -109,7 +152,7 @@ class ProcessData:
 
                 if not cue in norms:
                     norms[cue] = {}
-
+                #p(target|cue)
                 norms[cue][target] = float(nodes[5]) #FSG
 
 #        for cue in norms:

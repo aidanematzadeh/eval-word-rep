@@ -14,11 +14,14 @@ if __name__ == "__main__":
     google_path = sys.argv[2]
     # Path to the list of words that are used in evaluation
     filter_path = sys.argv[3]
+    lda_path = sys.argv[4]
 
     process = ProcessData(filter_path, google_path, nelson_path, True)
     norms_fsg = process.load_scores(nelson_path)
     word2vec_cond = process.load_scores(google_path)
     word2vec_cos = process.load_scores(filter_path)
+
+    lda = process.read_lda(lda_path, norms_fsg)
 
     pairs = process.get_pairs(norms_fsg)
     print("number of pairs", len(pairs))
@@ -27,7 +30,8 @@ if __name__ == "__main__":
     evaluate = Evaluation()
     scores_ratio = {}
     scores_dif = {}
-    for stype, scores in [("norms", norms_fsg), ("word2vec-cond", word2vec_cond)]:
+    for stype, scores in [("norms", norms_fsg), ("word2vec-cond", word2vec_cond), ("lda", lda)]:
+        print(stype)
         scores_ratio[stype], scores_dif[stype] = evaluate.asymmetry(scores, pairs)
 
         # Sort the asymmetries based on the ratio
@@ -35,10 +39,18 @@ if __name__ == "__main__":
         #print(stype, sorted_ratio[:19])
     #
     rho_ratio = evaluate.rank_correlation(scores_ratio["norms"], scores_ratio["word2vec-cond"])
-    print("Spearman of asymmetries based ratio ", rho_ratio)
+    print("W2V Spearman of asymmetries based ratio ", rho_ratio)
     #
     rho_dif = evaluate.rank_correlation(scores_dif["norms"], scores_dif["word2vec-cond"])
-    print("Spearman of asymmetries based difference ", rho_dif)
+    print("W2V Spearman of asymmetries based difference ", rho_dif)
+    #
+    rho_ratio = evaluate.rank_correlation(scores_ratio["norms"], scores_ratio["lda"])
+    print("LDA Spearman of asymmetries based ratio ", rho_ratio)
+    #
+    rho_dif = evaluate.rank_correlation(scores_dif["norms"], scores_dif["lda"])
+    print("LDA Spearman of asymmetries based difference ", rho_dif)
+
+
 
     mismatch = 0
     for index in range(len(pairs)):

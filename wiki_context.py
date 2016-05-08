@@ -10,7 +10,7 @@ import os.path
 import wikicorpus
 from process import ProcessData
 
-DEFAULT_DICT_SIZE = 200000
+DEFAULT_DICT_SIZE = 100000
 
 if __name__ == "__main__":
     # Read file path for different resources
@@ -31,9 +31,13 @@ if __name__ == "__main__":
     print("norm list", len(norms_fsg))
 
 
-    wiki = wikicorpus.WikiCorpus(wikipath, norms, wsize=10) # create word->word_id mapping, takes almost 8h
-    wiki.dictionary.filter_extremes(no_below=20, no_above=0.1, keep_n=DEFAULT_DICT_SIZE)
-   #TODO This filtering might remove some of the norms. Experiment with this.
+    wiki = wikicorpus.WikiCorpus(wikipath, norms, wsize=10, norm2docfile=outpath+"+.norm2doc") # create word->word_id mapping, takes almost 8h
+    #wiki.dictionary.filter_extremes(no_below=20, no_above=0.1, keep_n=DEFAULT_DICT_SIZE)
+    #
+    print("filtering extremes")
+    wiki.dictionary.filter_extremes(no_below=20, no_above=1, keep_n=DEFAULT_DICT_SIZE)
+   #
+
 
    # save dictionary and bag-of-words (term-document frequency matrix)
     gensim.corpora.MmCorpus.serialize(outpath, wiki, progress_cnt=10000)

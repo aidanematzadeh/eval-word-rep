@@ -21,6 +21,7 @@ Aida: Added a map-reduce function to collect the context of words instead of doc
 """
 
 
+import gc
 import bz2
 import logging
 import re
@@ -28,6 +29,7 @@ from xml.etree.cElementTree import iterparse  # LXML isn't faster, so let's go w
 import multiprocessing
 import os
 import time
+import pickle
 from collections import defaultdict
 #import numpy
 from stop_words import get_stop_words
@@ -277,6 +279,7 @@ def get_word_context(args, hwsize, wordlist):
     if contexts_clear:
         contexts_local.clear()
         contexts_local = defaultdict(defaultdict_int)
+        gc.collect()
         contexts_clear = False
         assert(len(contexts_local) == 0)
         print('%d context cleared' % os.getpid())
@@ -324,7 +327,7 @@ class WikiCorpus(TextCorpus):
     >>> MmCorpus.serialize('wiki_en_vocab200k.mm', wiki) # another 8h, creates a file in MatrixMarket format plus file with id->word
 
     """
-    def __init__(self, fname, wordlist, wsize, processes=None, lemmatize=utils.has_pattern(), dictionary=None, filter_namespaces=('0',)):
+    def __init__(self, fname, wordlist, wsize, norm2docfile, processes=None, lemmatize=utils.has_pattern(), dictionary=None, filter_namespaces=('0',)):
         """
         Initialize the corpus. Unless a dictionary is provided, this scans the
         corpus once, to determine its vocabulary.
@@ -344,15 +347,18 @@ class WikiCorpus(TextCorpus):
         if processes is None:
             processes = max(1, multiprocessing.cpu_count() - 2)
         self.processes = processes
-
         self.lemmatize = lemmatize
+
         #
         self.wsize = wsize
         self.wordlist = wordlist
-        #pid, cword, w = count
+        self.norm2docfile = norm2docfile
         self.contexts = defaultdict(lambda: defaultdict(int))
+        #
+        self.word2id = {}
+        self.id2word = {}
+        self.word_id_free = 1
 
-        print("lemmatize", self.lemmatize)
         if dictionary is None:
             self.dictionary = Dictionary(self.get_texts())
         else:
@@ -372,89 +378,56 @@ class WikiCorpus(TextCorpus):
         if len(self.contexts) == 0:
             print("Calling get_all_contexts")
             self.get_all_contexts()
-        print("context", len(self.contexts))
 
-        for word, d in self.contexts.items():
-            yield (cword for cword, count in d.items() for i in range(count))
+        word2doc = {}
+        for docid, (word_id, d) in enumerate(self.contexts.items()):
+            word2doc[self.id2word[word_id]] = [docid, d[word_id]]
+            yield (self.id2word[cword_id]
+                    for cword_id, count in d.items() for i in range(count) if cword_id != word_id)
+
+        with open(self.norm2docfile, 'wb') as f:
+            pickle.dump(word2doc, f)
+
 
     def get_all_contexts(self):
+        def word_id(word):
+            if word not in self.word2id:
+                self.word2id[word] = self.word_id_free
+                self.id2word[self.word_id_free] = word
+                self.word_id_free += 1
+            return self.word2id[word]
+
+        def merge_contexts():
+            pid_set = set()
+            for pid, contexts_local in pool.imap(fetch_contexts, [1] * self.processes):
+                assert(pid not in pid_set)
+                pid_set.add(pid)
+                for word, d in contexts_local.items():
+                    for cword, count in d.items():
+                        self.contexts[word_id(word)][word_id(cword)] += count
+                gc.collect()
+
         hwsize = self.wsize//2
         wordlist = self.wordlist
         texts = ((text, self.lemmatize, title, pageid) for title, text, pageid in extract_pages(bz2.BZ2File(self.fname), self.filter_namespaces))
-        self.length = len(wordlist)  # cache corpus length
+        #
         pool = multiprocessing.Pool(self.processes)
-        print("starting the multiprocessing part (map)")
         # process the corpus in smaller chunks of docs, because multiprocessing.Pool
         # is dumb and would load the entire input into RAM at once...
         index = 0
-        for group in utils.chunkize(texts, chunksize=500 * self.processes, maxsize=1):
+        chunk_size = 10 * self.processes
+        fetch_frequency = 500000 - 500000 % chunk_size
+        for group in utils.chunkize(texts, chunksize=chunk_size, maxsize=1):
             print("processing", index, len(group), time.time())
             pool.map(GetWordContextWrapper(hwsize, wordlist), group)#, chunksize=500)
-            index += 1
+            index += len(group)
             # combining the contexts
-            if index % 200 == 0:
-                pid_set = set()
-                for pid, contexts_local in pool.imap(fetch_contexts, [1] * self.processes):
-                    assert(pid not in pid_set)
-                    pid_set.add(pid)
-                    for word, d in contexts_local.items():
-                        for cword, count in d.items():
-                            self.contexts[word][cword] += count
-            if index >= 1: break
-        #TODO Can do this better
-        pid_set = set()
-        for pid, contexts_local in pool.imap(fetch_contexts, [1] * self.processes):
-            assert(pid not in pid_set)
-            pid_set.add(pid)
-            for word, d in contexts_local.items():
-                for cword, count in d.items():
-                    self.contexts[word][cword] += count
-
+            if index % fetch_frequency == 0:
+                merge_contexts()
+            if index >= 100000: break
+        #
+        merge_contexts()
         pool.terminate()
 
 
-        #for word in self.contexts:
-        #    sumv = numpy.sum(list(self.contexts[word].values()))
-        #    print(word, self.contexts[word][word], len(self.contexts[word]), sumv)
-
-    def get_texts_original(self):
-        """
-        Iterate over the dump, returning text version of each article as a list
-        of tokens.
-
-        Only articles of sufficient length are returned (short articles & redirects
-        etc are ignored).
-
-        Note that this iterates over the **texts**; if you want vectors, just use
-        the standard corpus interface instead of this function::
-
-        >>> for vec in wiki_corpus:
-        >>>     print(vec)
-        """
-        articles, articles_all = 0, 0
-        positions, positions_all = 0, 0
-        texts = ((text, self.lemmatize, title, pageid) for title, text, pageid in extract_pages(bz2.BZ2File(self.fname), self.filter_namespaces))
-        pool = multiprocessing.Pool(self.processes)
-        # process the corpus in smaller chunks of docs, because multiprocessing.Pool
-        # is dumb and would load the entire input into RAM at once...
-        for group in utils.chunkize(texts, chunksize=10 * self.processes, maxsize=1):
-            for tokens, title, pageid in pool.imap(process_article, group):  # chunksize=10):
-                articles_all += 1
-                positions_all += len(tokens)
-                # article redirects and short stubs are pruned here
-                if len(tokens) < ARTICLE_MIN_WORDS or any(title.startswith(ignore + ':') for ignore in IGNORED_NAMESPACES):
-                    continue
-                articles += 1
-                positions += len(tokens)
-                if self.metadata:
-                    yield (tokens, (pageid, title))
-                else:
-                    yield tokens
-        pool.terminate()
-
-        logger.info(
-            "finished iterating over Wikipedia corpus of %i documents with %i positions"
-            " (total %i articles, %i positions before pruning articles shorter than %i words)",
-            articles, positions, articles_all, positions_all, ARTICLE_MIN_WORDS)
-        self.length = articles  # cache corpus length
 # endclass WikiCorpus
