@@ -1,127 +1,109 @@
 """
 Run the evaluation methods.
 """
-import sys
+#import sys
 import numpy as np
-
+import argparse
+from collections import defaultdict
 from evaluate import Evaluation
 from process import ProcessData
 
+def defaultdict_list():
+    return defaultdict(list)
+
+
 if __name__ == "__main__":
 
-    # Read file path for different resources
-    nelson_path = sys.argv[1]
-    google_path = sys.argv[2]
-    # Path to the list of words that are used in evaluation
-    filter_path = sys.argv[3]
-    lda_path = sys.argv[4]
+    argparser = argparse.ArgumentParser()
+    argparser.add_argument("nelson", type=str, help="Input Neslon norms path or pickle file.")
+    argparser.add_argument("word2vec", type=str, help="Input word2vec path or pickle file.")
+    argparser.add_argument("lda", type=str, help="the LDA model")
+    argparser.add_argument("outdir", default='', help="Directory to place output files. (default='')")
+    argparser.add_argument("filter", type=str, default=None, help="The associations used in Griffiths et al")
+    args = argparser.parse_args()
 
-    process = ProcessData(filter_path, google_path, nelson_path, True)
-    norms_fsg = process.load_scores(nelson_path)
-    word2vec_cond = process.load_scores(google_path)
-    word2vec_cos = process.load_scores(filter_path)
+    process = ProcessData(args.word2vec, args.nelson, args.outdir, None)
+    norms_fsg = process.norms_fsg
+    word2vec_cond = process.word2vec_cond
+    word2vec_cos = process.word2vec_cos
 
-    lda = process.read_lda(lda_path, norms_fsg)
+    lda = process.read_lda(args.lda, norms_fsg)
 
-    pairs = process.get_pairs(norms_fsg)
+    pairs = process.get_pairs(norms_fsg, lda)
     print("number of pairs", len(pairs))
 
-    print("Asymmetries")
     evaluate = Evaluation()
-    scores_ratio = {}
-    scores_dif = {}
-    for stype, scores in [("norms", norms_fsg), ("word2vec-cond", word2vec_cond), ("lda", lda)]:
-        print(stype)
-        scores_ratio[stype], scores_dif[stype] = evaluate.asymmetry(scores, pairs)
+
+    print("Asymmetries")
+    asyms= defaultdict(defaultdict_list)
+    evallist = [("norms", norms_fsg), ("word2vec-cond", word2vec_cond), \
+            ("word2vec-cos", word2vec_cos), ("lda", lda)]
+    for stype, scores in evallist:
+        if stype == "word2vec-cos": continue
+        asyms["ratio"][stype], asyms["difference"][stype] = evaluate.asymmetry(scores, pairs)
 
         # Sort the asymmetries based on the ratio
         #sorted_ratio = [(key, value) for (value, key) in sorted(zip(scores_ratio.values(), scores_ratio.keys()), reverse=True)]
         #print(stype, sorted_ratio[:19])
-    #
-    rho_ratio = evaluate.rank_correlation(scores_ratio["norms"], scores_ratio["word2vec-cond"])
-    print("W2V Spearman of asymmetries based ratio ", rho_ratio)
-    #
-    rho_dif = evaluate.rank_correlation(scores_dif["norms"], scores_dif["word2vec-cond"])
-    print("W2V Spearman of asymmetries based difference ", rho_dif)
-    #
-    rho_ratio = evaluate.rank_correlation(scores_ratio["norms"], scores_ratio["lda"])
-    print("LDA Spearman of asymmetries based ratio ", rho_ratio)
-    #
-    rho_dif = evaluate.rank_correlation(scores_dif["norms"], scores_dif["lda"])
-    print("LDA Spearman of asymmetries based difference ", rho_dif)
 
+    for b in asyms:
+        for stype in asyms[b]:
+            rho = evaluate.rank_correlation(asyms[b]["norms"], asyms[b][stype])
+            print("correlation between norms and %s (%s of asymmetries): (%.2f, %.2f)" % (stype, b, rho[0], rho[1]))
 
+            if stype == "difference": continue
+            for index in range(len(pairs)):
+                if asyms[b]["norms"][index] > 30 and \
+                    (asyms[b][stype][index] < 1):
+                        print(pairs[index], asyms[b]["norms"][index], asyms[b][stype][index])
+            print()
 
-    mismatch = 0
-    for index in range(len(pairs)):
-        if scores_ratio["norms"][index] > 30 and \
-                (scores_ratio["word2vec-cond"][index] < 1):
-                    print(pairs[index], scores_ratio["norms"][index], scores_ratio["word2vec-cond"][index])
-                    mismatch += 1
-    print("mismatch", mismatch)
-
-
-    #
-    tuples = process.get_tuples(norms_fsg)
+    asym = None
+    tuples = process.get_tuples(norms_fsg, lda)
     print("Number of tuples", len(tuples))
     #
-    # Examine whether the traingle inequality holds in Nelson norms
-    thresholds = np.arange(0.45, 0.85, 0.1)
-    norm_prob_dist_thresh, norm_dif, norm_ratio = evaluate.traingle_inequality_threshold(tuples, norms_fsg, thresholds)
-    evaluate.plot_traingle_inequality(norm_prob_dist_thresh, "nelson_")
+    print("Triangle Inequality")
+    # Examine whether the traingle inequality holds
+    thresholds = {}
+    thresholds["norms"] = np.arange(0.45, 0.85, 0.1)
+    thresholds["word2vec-cos"] = np.arange(0.65, 1, 0.1)
+    thresholds["word2vec-cond"] = np.arange(0.00035, 0.00051, 0.00005)
+    thresholds["lda"] = np.arange(0.45, 0.85, 0.1)
+    te = defaultdict(defaultdict_list)
+    for stype, scores in evallist:
+        te_dist, te["ratios"][stype], te["differences"][stype] = evaluate.traingle_inequality_threshold(tuples, scores, thresholds[stype])
+        #evaluate.plot_traingle_inequality(te_dist, stype + "_")
+
+    for b in te:
+        for stype in te[b]:
+            rho = evaluate.rank_correlation(te[b]["norms"], te[b][stype])
+            print("correlation between norms and %s (%s of traingle inequality): (%.2f, %.2f)" % (stype, b, rho[0], rho[1]))
+
+            if stype == "difference": continue
+            for index in range(len(tuples)):
+                if te[b]["norms"][index] > 30 and \
+                        te[b][stype][index] < 1:
+                            print(tuples[index], te[b]["norms"][index], te[b][stype][index])
 
 
-    # Examine whether the triangle inequlaity holds for word2vec using cosine
-    # and conditional probability
-    thresholds = np.arange(0.65, 1, 0.1)
-    w2vcos_prob_dist_thresh, w2vcos_dif, w2vcos_ratio = evaluate.traingle_inequality_threshold(tuples, word2vec_cos, thresholds)
-    evaluate.plot_traingle_inequality(w2vcos_prob_dist_thresh, "word2vec_cos")
-
-
-    thresholds = np.arange(0.00035, 0.00051, 0.00005)
-    w2vcond_prob_dist_thresh, w2vcond_dif, w2vcond_ratio = evaluate.traingle_inequality_threshold(tuples, \
-    word2vec_cond, thresholds)
-    evaluate.plot_traingle_inequality(w2vcond_prob_dist_thresh, "word2vec_cond")
-
-    rho_te = evaluate.rank_correlation(norm_dif, w2vcond_dif)
-    print("correlation in traingle ineq cond prob", rho_te)
-    for index in range(len(tuples)):
-        if norm_ratio[index] > 30 and \
-                w2vcond_ratio[index] < 1:
-                    print(tuples[index], norm_ratio[index], w2vcond_ratio[index])
-    #
-    rho_te = evaluate.rank_correlation(norm_dif, w2vcos_dif)
-    print("correlation in traingle ineq cosine", rho_te)
-    for index in range(len(tuples)):
-        if norm_ratio[index] > 30 and \
-                w2vcos_ratio[index] < 1:
-                    print(tuples[index], norm_ratio[index], w2vcond_ratio[index])
-
-
+    print("Associations")
     # Median rank of associates
     # Sort the norm associates
     gold_associates = evaluate.sort_scores(norms_fsg)
 
-    # Sort the word2vec asscociates
-    w2vcos_sorted = evaluate.sort_scores(word2vec_cos)
-    w2vcond_sorted = evaluate.sort_scores(word2vec_cond)
-
-
-    #for cue in w2vcos_sorted:
-    #    print("cos", cue, w2vcos_sorted[cue][:10])
-    #    print("logcond", cue, w2vcond_sorted[cue][:10])
-    #    print("norm", cue, gold_associates[cue][:10])
-
-    print("Word2Vec, cosine")
-    w2vcos_ranks = evaluate.median_rank(gold_associates, w2vcos_sorted, 10)
-    for rank in w2vcos_ranks:
-        print("median rank associate %d: %.2f", (rank+1, np.median(w2vcos_ranks[rank])))
-
-    print("\nWord2Vec, conditional prob")
-    w2vcond_ranks = evaluate.median_rank(gold_associates, w2vcond_sorted, 10)
-    for rank in w2vcond_ranks:
-        print("median rank associate %d: %.2f", (rank+1, np.median(w2vcond_ranks[rank])))
-
+    for stype, scores in evallist:
+        # Sort the word2vec asscociates
+        scores_sorted = evaluate.sort_scores(scores)
+        print(stype)
+        ranks = evaluate.median_rank(gold_associates, scores_sorted, 10)
+        for rank in ranks:
+            print("median rank associate %d: %.2f" % (rank+1, np.median(ranks[rank])))
+        print
+        count = 0
+        for cue in scores_sorted:
+            print(stype, cue, scores_sorted[cue][:2], gold_associates[cue][:2])
+            if count > 4: break
+            count += 1
 
 
 

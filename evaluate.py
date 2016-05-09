@@ -77,7 +77,7 @@ class Evaluation:
 
             #print((w1,w2,w3), differences[-1])
 
-        return prob_dist_thresh, differences, ratios
+        return prob_dist_thresh, ratios, differences
 
 
     def plot_traingle_inequality(self, dist, name):
@@ -94,7 +94,7 @@ class Evaluation:
     def sort_scores(self, scores):
         sorted_scores = {}
         for cue in scores:
-            sorted_scores[cue] = sorted(scores[cue].items(), key=operator.itemgetter(1))
+            sorted_scores[cue] = sorted(scores[cue].items(), key=operator.itemgetter(1), reverse=True)
         return sorted_scores
 
 
@@ -110,6 +110,8 @@ class Evaluation:
                 for j in range(len(scores[cue])):
                     if scores[cue][j][0] == target:
                         ranks[index].append(j+1)
+                        #ranks[index].append(len(scores[cue]))
+                        break
         return ranks
 
 

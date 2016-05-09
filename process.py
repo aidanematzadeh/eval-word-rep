@@ -4,49 +4,50 @@ import numpy as np
 import scipy.io as sio
 import scipy
 import pickle
+from collections import defaultdict
+
+def defaultdict_int():
+    return defaultdict(int)
 
 
 class ProcessData:
     """ This class reads and process data used for evaluation.
     """
-    def __init__(self, filter_path=None, google_path=None, nelson_path=None, readflag=True):
+    def __init__(self, word2vec_path, nelson_path, outdir, filter_path=None):
         self.word_list = set()
-        if not readflag:
-            self._calc_scores(filter_path, google_path, nelson_path)
+        # The path where the pickle files are written
+        self.outdir = outdir + "/"
+
+        if not filter_path == None:
+            self.assoc_list = self.read_filter_words(filter_path)
+            print("assoc list from Griffiths et al", len(self.assoc_list))
+
+        # Nelson Norms
+        if nelson_path.endswith("pickle"):
+            self.norms_fsg = self.load_scores(nelson_path)
+        else:
+            self.norms_fsg = self.read_norms(nelson_path)
+
+        # Word2vec
+        if word2vec_path.endswith("pickle"):
+            self.word2vec_cond = self.load_scores(word2vec_path)
+            self.word2vec_cos = self.load_scores(word2vec_path.replace('cond','cos'))
+        else:
+            # Read the word list that the evaluation is on. These words should occur in
+            # both Nelson norms and Google vectors
+            word2vec_model = self.load_word2vec_model(word2vec_path)
+            # words in common between norms and word2vec
+            for word in self.assoc_list:
+                if word in word2vec_model:
+                    self.word_list.add(word)
+
+            print("words from assoc list that occuer in word2vec vectors", len(self.word_list))
+            word2vec_cos, word2vec_cond = self.read_word2vec(word2vec_model, self.norms_fsg, self.word_list)
 
     def load_scores(self, path):
         with open(path, 'rb') as f:
             scores = pickle.load(f)
         return scores
-
-    def _calc_scores(self, filter_path, google_path, nelson_path):
-        # Read the word list that the evaluation is on. These words should occur in
-        # both Nelson norms and Google vectors
-
-        assoc_list = self.read_filter_words(filter_path)
-        print("assoc list from Griffiths et al", len(assoc_list))
-
-        word2vec_model = self.load_word2vec_model(google_path)
-        # words in common between norms and word2vec
-        for word in assoc_list:
-            if word in word2vec_model:
-                self.word_list.add(word)
-        print("words from assoc list that occuer in word2vec vectors", len(self.word_list))
-
-        norms_fsg = self.read_norms(nelson_path, self.word_list)
-        print("norm list", len(norms_fsg))
-        #
-        with open('norms.pickle' ,'wb') as output:
-            pickle.dump(norms_fsg, output)
-        #
-        word2vec_cos, word2vec_cond = self.read_word2vec(word2vec_model, norms_fsg, self.word_list)
-        with open('word2vec_cond.pickle' , 'wb') as output:
-            pickle.dump(word2vec_cond, output)
-        #
-        with open('word2vec_cos.pickle', 'wb') as output:
-            pickle.dump(word2vec_cos, output)
-        print("size", len(word2vec_cos), len(norms_fsg), len(word2vec_cond))
-
 
     def load_word2vec_model(self, google_path):
         model = gensim.models.Word2Vec.load_word2vec_format(google_path, binary=True)
@@ -59,12 +60,8 @@ class ProcessData:
 
         We assume that all words in word_list have a word2vec representation.
         """
-        word2vec_cos = {}
-        word2vec_logcond = {}
-        for cue in norms:
-            word2vec_cos[cue] = {}
-            word2vec_logcond[cue] = {}
-        #
+        word2vec_cos = defaultdict(defaultdict_int)
+        word2vec_cond = defaultdict(defaultdict_int)
         # Note that the cosine is the same as dot product for word2vec vectors
         for cue in norms:
             for target in norms[cue]:
@@ -73,7 +70,7 @@ class ProcessData:
                 except KeyError:
                     print(cue, target)
 
-        #cue w1, target w2, calculating p(w2|w1) that is p(target|cue)
+        # Calculate p(target|cue) where cue is w1 and target is w2
         # log(p(w2|w1)) = log(exp(w2.w1)) - log(sum(exp(w',w1)))
         for cue in norms:
             cue_context = []
@@ -85,9 +82,17 @@ class ProcessData:
             # Using words in the word_list to normalize the prob
             p_cue = scipy.misc.logsumexp(np.asarray(cue_context))
             for target in norms[cue]:
-                word2vec_logcond[cue][target] = np.exp(word2vec_cos[cue][target] - p_cue)
+                word2vec_cond[cue][target] = np.exp(word2vec_cos[cue][target] - p_cue)
 
-        return word2vec_cos, word2vec_logcond
+
+        with open(self.outdir + 'word2vec_cond.pickle' , 'wb') as output:
+            pickle.dump(word2vec_cond, output)
+        #
+        with open(self.outdir + 'word2vec_cos.pickle', 'wb') as output:
+            pickle.dump(word2vec_cos, output)
+        print("size", len(word2vec_cos), len(norms), len(word2vec_cond))
+
+        return word2vec_cos, word2vec_cond
 
     def read_lda(self, ldapath, norms):
         """ Calculate p(target|cue) = sum_topics{p(target|topic) p(topic|cue)}
@@ -103,42 +108,35 @@ class ProcessData:
             topics[k] = topics[k]/topics[k].sum()
         #TODO do not assume that the topic prob is uniform
         wordprob = np.zeros(lda.num_terms)
-        #
         print("----- norms in common", len(set(norms.keys()) & set(word2id.keys())))
         #
         for i in range(lda.num_terms):
             wordprob[i] = np.sum(topics[:,i]) # this should be multiplied with the topic prob
-        count = 0
-        # Need to run the lemmatizer
-        condprob = {}
+        #
+        #TODO Need to run the lemmatizer
+        condprob = defaultdict(defaultdict_int)
         for cue in norms:
-            if not (cue in word2id.keys() or gensim.utils.to_unicode(cue)):
+            if not (cue in word2id.keys()):
                 continue
-            #print(cue, gensim.utils.to_unicode(cue))
-            #cueid = word2id[ gensim.utils.to_unicode(cue)]
             cueid = word2id[cue]
-            if not cue in condprob.keys():
-                condprob[cue] = {}
-            #
+
             for target in norms[cue]:
-                if not (target in word2id.keys() or gensim.utils.to_unicode(target)):
+                if not (target in word2id.keys()):
                     continue
-                #targetid  = word2id[ gensim.utils.to_unicode(target)]
-                targetid=word2id[target]
-                condprob[cue][target] = 0.0
-                count += 1
+                targetid = word2id[target]
                 for k in range(len(topics)):
                     condprob[cue][target] +=  topics[k][targetid] * (topics[k][cueid] / wordprob[cueid])
-
+        #
         return condprob
 
-
-    def read_norms(self, norms_dir, word_list):
+    # TODO Can remove word_list from the arguments
+    def read_norms(self, norms_dir, word_list=None):
         """ Read Nelson norms for the evaluation methods.
         Limit the words to the one that are in the word_list
         Norms are formatted as: CUE, TARGET, NORMED?, #G, #P, FSG, BSG,
         """
-        norms = {}
+        # The value of zero means that the norms[cue][target] does not exist.
+        norms = defaultdict(defaultdict_int)
         for filename in os.listdir(norms_dir):
             norm_file = open(norms_dir + "/" + filename, 'r', encoding = "ISO-8859-1")
             norm_file.readline()
@@ -146,12 +144,6 @@ class ProcessData:
                 nodes = line.strip().split(',')
                 cue = nodes[0].strip().lower()
                 target = nodes[1].strip().lower()
-
-                if len(word_list) > 0 and \
-                        not (cue in word_list and target in word_list): continue
-
-                if not cue in norms:
-                    norms[cue] = {}
                 #p(target|cue)
                 norms[cue][target] = float(nodes[5]) #FSG
 
@@ -160,17 +152,26 @@ class ProcessData:
 #                if target in norms.keys() and not (cue in norms[target]):
 #                    norms[target][cue] = 0
 
+        with open(self.outdir + 'norms.pickle' ,'wb') as output:
+            pickle.dump(norms, output)
+
         return norms
 
-    def get_pairs(self, norms):
+    def get_pairs(self, norms, lda):
         pairs = set()
         for cue in norms:
             for target in norms[cue]:
-                if target in norms and cue in norms[target]:
-                    pairs.add((min(cue,target), max(cue,target)))
+                #
+                if lda[cue][target] == 0:
+                    continue
+                #
+                if norms[cue][target] == 0 or norms[target][cue] == 0:
+                    continue
+                #if target in norms and cue in norms[target]:
+                pairs.add((min(cue,target), max(cue,target)))
         return list(pairs)
 
-    def get_tuples(self, norms):
+    def get_tuples(self, norms, lda):
         """ Find all the three words for which P(w2|w1), P(w3|w2), and P(w3|w1) exist
         This is equivalent to the subset of the combination of 3-length ordered tuples
         that their pairs exist in Nelson norms.
@@ -184,6 +185,8 @@ class ProcessData:
 
                 for w3 in norms[w2]:
                     if w3 in norms[w1]:
+                        #TODO
+                        if lda[w1][w2] == 0 or lda[w2][w3] == 0 or lda[w1][w3] == 0: continue
                         tuples.append((w1, w2, w3))
         return tuples
 
