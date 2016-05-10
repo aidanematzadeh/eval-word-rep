@@ -22,7 +22,7 @@ if __name__ == "__main__":
     argparser.add_argument("filter", type=str, default=None, help="The associations used in Griffiths et al")
     args = argparser.parse_args()
 
-    process = ProcessData(args.word2vec, args.nelson, args.outdir, None)
+    process = ProcessData(args.word2vec, args.nelson, args.outdir, args.filter)
     norms_fsg = process.norms_fsg
     word2vec_cond = process.word2vec_cond
     word2vec_cos = process.word2vec_cos

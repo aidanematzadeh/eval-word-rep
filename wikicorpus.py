@@ -327,7 +327,7 @@ class WikiCorpus(TextCorpus):
     >>> MmCorpus.serialize('wiki_en_vocab200k.mm', wiki) # another 8h, creates a file in MatrixMarket format plus file with id->word
 
     """
-    def __init__(self, fname, wordlist, wsize, norm2docfile, processes=None, lemmatize=utils.has_pattern(), dictionary=None, filter_namespaces=('0',)):
+    def __init__(self, fname, wordlist, wsize, norm2docfile, wikiflag=True,  processes=None, lemmatize=utils.has_pattern(), dictionary=None, filter_namespaces=('0',)):
         """
         Initialize the corpus. Unless a dictionary is provided, this scans the
         corpus once, to determine its vocabulary.
@@ -354,6 +354,8 @@ class WikiCorpus(TextCorpus):
         self.wordlist = wordlist
         self.norm2docfile = norm2docfile
         self.contexts = defaultdict(lambda: defaultdict(int))
+        # This says if we are processing wiki or a text file
+        self.wikiflag = wikiflag
         #
         self.word2id = {}
         self.id2word = {}
@@ -376,14 +378,18 @@ class WikiCorpus(TextCorpus):
 
         """
         if len(self.contexts) == 0:
-            print("Calling get_all_contexts")
+            logger.info("Calling get_all_contexts()")
             self.get_all_contexts()
 
         word2doc = {}
         for docid, (word_id, d) in enumerate(self.contexts.items()):
             word2doc[self.id2word[word_id]] = [docid, d[word_id]]
             yield (self.id2word[cword_id]
-                    for cword_id, count in d.items() for i in range(count) if cword_id != word_id)
+                    for cword_id, count in d.items() for i in range(count))
+            # This would not keep the nelson norms in the document
+            #yield (self.id2word[cword_id]
+            #        for cword_id, count in d.items() for i in range(count) if cword_id != word_id)
+
 
         with open(self.norm2docfile, 'wb') as f:
             pickle.dump(word2doc, f)
@@ -409,7 +415,13 @@ class WikiCorpus(TextCorpus):
 
         hwsize = self.wsize//2
         wordlist = self.wordlist
-        texts = ((text, self.lemmatize, title, pageid) for title, text, pageid in extract_pages(bz2.BZ2File(self.fname), self.filter_namespaces))
+        #
+        if self.wikiflag:
+            texts = ((text, self.lemmatize, title, pageid) for title, text, pageid in extract_pages(bz2.BZ2File(self.fname), self.filter_namespaces))
+        else:
+            tfile = open(self.fname, 'r')
+            texts = ((line, self.lemmatize, "title", "pageid") for line in tfile)
+            self.processess = 1 #TODO
         #
         pool = multiprocessing.Pool(self.processes)
         # process the corpus in smaller chunks of docs, because multiprocessing.Pool
@@ -418,7 +430,7 @@ class WikiCorpus(TextCorpus):
         chunk_size = 25 * self.processes
         fetch_frequency = 2000000 - 2000000 % chunk_size
         for group in utils.chunkize(texts, chunksize=chunk_size, maxsize=1):
-            print("processing", index, len(group), time.time())
+            logger.info("processing %d %d %f" % (index, len(group), time.time()))
             pool.map(GetWordContextWrapper(hwsize, wordlist), group)#, chunksize=500)
             index += len(group)
             # combining the contexts
