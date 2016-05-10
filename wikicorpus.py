@@ -181,6 +181,7 @@ def tokenize(content):
     Return list of tokens as utf8 bytestrings. Ignore words shorted than 2 or longer
     that 15 characters (not bytes!).
     """
+    print(stoplist)
     # TODO maybe ignore tokens with non-latin characters? (no chinese, arabic, russian etc.)
     return [token.encode('utf8') for token in utils.tokenize(content, lower=True, errors='ignore')
             if 2 <= len(token) <= 15 and not token.startswith('_') and not token in stoplist]
@@ -244,19 +245,6 @@ def extract_pages(f, filter_namespaces=False):
             elem.clear()
 _extract_pages = extract_pages  # for backward compatibility
 
-
-def process_article(args):
-    """
-    Parse a wikipedia article, returning its content as a list of tokens
-    (utf8-encoded strings).
-    """
-    text, lemmatize, title, pageid = args
-    text = filter_wiki(text)
-    if lemmatize:
-        result = utils.lemmatize(text)
-    else:
-        result = tokenize(text)
-    return result, title, pageid
 
 def defaultdict_int():
     return defaultdict(int)
@@ -357,6 +345,7 @@ class WikiCorpus(TextCorpus):
         # This says if we are processing wiki or a text file
         self.wikiflag = wikiflag
         #
+        #
         self.word2id = {}
         self.id2word = {}
         self.word_id_free = 1
@@ -419,10 +408,14 @@ class WikiCorpus(TextCorpus):
         if self.wikiflag:
             texts = ((text, self.lemmatize, title, pageid) for title, text, pageid in extract_pages(bz2.BZ2File(self.fname), self.filter_namespaces))
         else:
+            global stoplist
+            stoplist = set([])
             tfile = open(self.fname, 'r')
             texts = ((line, self.lemmatize, "title", "pageid") for line in tfile)
-            self.processess = 1 #TODO
+            self.processes = 1 #TODO
         #
+        print("--------", self.processes)
+
         pool = multiprocessing.Pool(self.processes)
         # process the corpus in smaller chunks of docs, because multiprocessing.Pool
         # is dumb and would load the entire input into RAM at once...

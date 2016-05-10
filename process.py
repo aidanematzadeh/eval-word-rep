@@ -33,7 +33,7 @@ class ProcessData:
     """ This class reads and process data used for evaluation.
     """
     #TODO can remove the filter_path
-    def __init__(self, word2vec_path, nelson_path, lda_words_path, outdir, common_words=None, filter_path=None):
+    def __init__(self,  nelson_path, word2vec_path, lda_words_path, outdir):
         self.common_words = set()
         # The path where the pickle files are written
         self.outdir = outdir + "/"
@@ -41,7 +41,7 @@ class ProcessData:
         # Nelson Norms
         if nelson_path.endswith("pickle"):
             self.norms_fsg = self.load_scores(nelson_path)
-            self.common_words = self.load_scores(common_words)
+            self.common_words = self.load_scores(lda_words_path)
         else:
             self.norms_fsg = self.read_norms(nelson_path)
             self.common_words = self.get_words(self.norms_fsg, word2vec_path, lda_words_path)
@@ -52,7 +52,8 @@ class ProcessData:
             self.word2vec_cos = self.load_scores(word2vec_path.replace('cond','cos'))
         else:
             word2vec_model = self.load_word2vec_model(word2vec_path)
-            word2vec_cos, word2vec_cond = self.read_word2vec(word2vec_model, self.norms_fsg, self.common_words)
+            print("common words %d" % len(self.common_words))
+            self.word2vec_cos, self.word2vec_cond = self.read_word2vec(word2vec_model, self.norms_fsg, self.common_words)
 
     def load_scores(self, path):
         with open(path, 'rb') as f:
@@ -76,7 +77,7 @@ class ProcessData:
         word2vec_cond = defaultdict(defaultdict_int)
         # Note that the cosine is the same as dot product for word2vec vectors
         for cue in norms:
-            if not cue in word_list: continue
+            if not (cue in word_list): continue
             for target in norms[cue]:
                 if not (target in word_list): continue
                 word2vec_cos[cue][target] = model.similarity(cue, target)
@@ -84,6 +85,7 @@ class ProcessData:
         # Calculate p(target|cue) where cue is w1 and target is w2
         # log(p(w2|w1)) = log(exp(w2.w1)) - log(sum(exp(w',w1)))
         for cue in norms:
+            if not cue in word_list: continue
             cue_context = []
             #TODO
             for w in word_list:
@@ -120,18 +122,15 @@ class ProcessData:
             topics[k] = topics[k]/topics[k].sum()
         #TODO do not assume that the topic prob is uniform
         wordprob = np.zeros(lda.num_terms)
-        print("----- norms in common", len(set(norms.keys()) & set(word2id.keys())))
-        #
         for i in range(lda.num_terms):
             wordprob[i] = np.sum(topics[:,i]) # this should be multiplied with the topic prob
-        #
         #TODO Need to run the lemmatizer
         condprob = defaultdict(defaultdict_int)
         for cue in norms:
-            if not (cue in word_list):continue
+            if not (cue in word_list): continue
             cueid = word2id[cue]
             for target in norms[cue]:
-                if not (target in word_list):continue
+                if not (target in word_list): continue
                 targetid = word2id[target]
                 for k in range(len(topics)):
                     condprob[cue][target] +=  topics[k][targetid] * (topics[k][cueid] / wordprob[cueid])
@@ -154,6 +153,7 @@ class ProcessData:
         both Nelson norms, word2vec, and LDA.
         """
         words = set([])
+        remove_words = []
         for cue in norms:
             words.add(cue)
             for target in norms[cue]:
@@ -163,7 +163,11 @@ class ProcessData:
         word2vec_model = self.load_word2vec_model(word2vec_path)
         for word in words:
             if not word in word2vec_model:
-                words.remove(word)
+                remove_words.append(word)
+
+        for word in remove_words:
+            words.remove(word)
+        remove_words = []
         print("cues and targets in norms and word2vec %d" % len(words))
 
         lda_file = open(lda_words_path, 'r')
@@ -172,46 +176,50 @@ class ProcessData:
 
         for word in words:
             if not word in lda_words:
-                words.remove(word)
+                remove_words.append(word)
+        for word in remove_words:
+            words.remove(word)
+        remove_words = []
+
         print("cues and targets in norms, word2vec, and LDA %d" % len(words))
         #if not filter_path == None:
         #    self.assoc_list = self.read_filter_words(filter_path)
         #    print("assoc list from Griffiths et al", len(self.assoc_list))
-        with open(self.outdir, 'common_words.pickle', 'wb') as output:
+        with open(self.outdir + 'common_words.pickle', 'wb') as output:
             pickle.dump(words, output)
         return words
 
 
-    def get_pairs(self, norms, lda):
+    def get_pairs(self, norms, word_list):
+        """ Return the pairs for which both p(target|cue) and P(cue|target)
+        exist.
+        """
         pairs = set()
         for cue in norms:
+            if not cue in word_list: continue
             for target in norms[cue]:
+                if not target in word_list: continue
                 #
-                if lda[cue][target] == 0:
-                    continue
-                #
-                if norms[cue][target] == 0 or norms[target][cue] == 0:
-                    continue
-                #if target in norms and cue in norms[target]:
-                pairs.add((min(cue,target), max(cue,target)))
+                if target in norms:
+                    if cue in norms[target]:
+                        pairs.add((min(cue,target), max(cue,target)))
         return list(pairs)
 
-    def get_tuples(self, norms, lda):
+    def get_tuples(self, norms, word_list):
         """ Find all the three words for which P(w2|w1), P(w3|w2), and P(w3|w1) exist
         This is equivalent to the subset of the combination of 3-length ordered tuples
         that their pairs exist in Nelson norms.
         """
         tuples = []
-
         for w1 in norms:
+            if not w1 in word_list: continue
             for w2 in norms[w1]:
-                if not w2 in norms:
-                    continue
+                if not w2 in word_list: continue
+                if not w2 in norms: continue
 
                 for w3 in norms[w2]:
+                    if not w3 in word_list: continue
                     if w3 in norms[w1]:
-                        #TODO
-                        if lda[w1][w2] == 0 or lda[w2][w3] == 0 or lda[w1][w3] == 0: continue
                         tuples.append((w1, w2, w3))
         return tuples
 

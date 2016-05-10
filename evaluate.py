@@ -1,5 +1,7 @@
 #import math
 import scipy.stats
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import operator
 
@@ -51,6 +53,7 @@ class Evaluation:
         Find the pairs such that P(w2|w1) and P(w3|w2) are greater than the threshold;
         plot the distribution of P(w3|w1).
 
+
         Traingle inequaliy: P(w2|w1) + P(w3|w2) >= P(w3|w1)
 
         This is based on Griffiths et al. (2007).
@@ -70,8 +73,7 @@ class Evaluation:
             for t in thresholds:
                 if scores[w1][w2] >= t and scores[w2][w3] >= t:
                     prob_dist_thresh[t].append(scores[w1][w3])
-            #print(t, len(prob_dist_thresh[t]))
-            #
+
             differences.append(min(scores[w1][w2], scores[w2][w3]) - scores[w1][w3])
             ratios.append(min(scores[w1][w2], scores[w2][w3]) / scores[w1][w3])
 
@@ -84,10 +86,12 @@ class Evaluation:
         fig = plt.figure()
         ax = fig.add_subplot(111)
         #
-        for thres in dist:
+        for thres in sorted(dist.keys()):
             print(name, thres, len(dist[thres]))
-            ax.hist(dist[thres], label=str(thres))
-        ax.set_ylim(0, 100)
+            print(ax.hist(dist[thres], label=str(thres), normed=True))
+        #ax.set_ylim(0, 10)
+        #ax.set_xlim(0, 0.0001)
+
         ax.legend()
         fig.savefig(name)
 
@@ -98,15 +102,17 @@ class Evaluation:
         return sorted_scores
 
 
-    def median_rank(self, gold, scores, n):
+    def median_rank(self, gold, scores, word_list,  n=3):
         """ calculate the median rank of the first n associates """
         ranks = {}
         for r in range(n):
             ranks[r] = []
 
         for cue in gold:
+            if not cue in word_list: continue
             for index in range(min(len(gold[cue]), n)):
                 target = gold[cue][index][0]
+                if not target in word_list:continue
                 for j in range(len(scores[cue])):
                     if scores[cue][j][0] == target:
                         ranks[index].append(j+1)

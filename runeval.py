@@ -18,18 +18,18 @@ if __name__ == "__main__":
     argparser.add_argument("nelson", type=str, help="Input Neslon norms path or pickle file.")
     argparser.add_argument("word2vec", type=str, help="Input word2vec path or pickle file.")
     argparser.add_argument("lda", type=str, help="the LDA model")
+    argparser.add_argument("ldawords", type=str, help="the LDA words")
     argparser.add_argument("outdir", default='', help="Directory to place output files. (default='')")
-    argparser.add_argument("filter", type=str, default=None, help="The associations used in Griffiths et al")
     args = argparser.parse_args()
 
-    process = ProcessData(args.word2vec, args.nelson, args.outdir, args.filter)
+    process = ProcessData(args.nelson, args.word2vec, args.ldawords, args.outdir)
     norms_fsg = process.norms_fsg
     word2vec_cond = process.word2vec_cond
     word2vec_cos = process.word2vec_cos
+    common_words = process.common_words
+    lda = process.read_lda(args.lda, norms_fsg, common_words)
 
-    lda = process.read_lda(args.lda, norms_fsg)
-
-    pairs = process.get_pairs(norms_fsg, lda)
+    pairs = process.get_pairs(norms_fsg, common_words)
     print("number of pairs", len(pairs))
 
     evaluate = Evaluation()
@@ -66,13 +66,13 @@ if __name__ == "__main__":
     # Examine whether the traingle inequality holds
     thresholds = {}
     thresholds["norms"] = np.arange(0.45, 0.85, 0.1)
-    thresholds["word2vec-cos"] = np.arange(0.65, 1, 0.1)
-    thresholds["word2vec-cond"] = np.arange(0.00035, 0.00051, 0.00005)
-    thresholds["lda"] = np.arange(0.45, 0.85, 0.1)
+    thresholds["word2vec-cos"] = np.arange(0.75, 1, 0.1)
+    thresholds["word2vec-cond"] =  np.arange(0.0002, 0.00035, 0.00005)#np.arange(0.00035, 0.00051, 0.00005)
+    thresholds["lda"] = np.arange(0.005, 0.025, 0.005)
     te = defaultdict(defaultdict_list)
     for stype, scores in evallist:
         te_dist, te["ratios"][stype], te["differences"][stype] = evaluate.traingle_inequality_threshold(tuples, scores, thresholds[stype])
-        #evaluate.plot_traingle_inequality(te_dist, stype + "_")
+        evaluate.plot_traingle_inequality(te_dist, process.outdir + stype + "_")
 
     for b in te:
         for stype in te[b]:
@@ -95,7 +95,7 @@ if __name__ == "__main__":
         # Sort the word2vec asscociates
         scores_sorted = evaluate.sort_scores(scores)
         print(stype)
-        ranks = evaluate.median_rank(gold_associates, scores_sorted, 10)
+        ranks = evaluate.median_rank(gold_associates, scores_sorted, common_words, 5)
         for rank in ranks:
             print("median rank associate %d: %.2f" % (rank+1, np.median(ranks[rank])))
         print
