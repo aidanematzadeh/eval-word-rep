@@ -181,7 +181,6 @@ def tokenize(content):
     Return list of tokens as utf8 bytestrings. Ignore words shorted than 2 or longer
     that 15 characters (not bytes!).
     """
-    print(stoplist)
     # TODO maybe ignore tokens with non-latin characters? (no chinese, arabic, russian etc.)
     return [token.encode('utf8') for token in utils.tokenize(content, lower=True, errors='ignore')
             if 2 <= len(token) <= 15 and not token.startswith('_') and not token in stoplist]
@@ -277,9 +276,11 @@ def get_word_context(args, hwsize, wordlist):
         return
 
     text = filter_wiki(text)
+
     result = []
+    padding = b't-pad'
     for i in range(hwsize):
-        result.append(b't-start')
+        result.append(padding)
 
     if lemmatize:
         result += utils.lemmatize(text)
@@ -287,15 +288,15 @@ def get_word_context(args, hwsize, wordlist):
         result += tokenize(text)
 
     for i in range(hwsize):
-        result.append(b"t-end")
+        result.append(padding)
 
     for index in range(len(result)):
         word = result[index]
         if not word.decode() in wordlist:
             continue
         for cword in result[index-hwsize:index+hwsize+1]:
-            contexts_local[word][cword] += 1 #.append(' '.join(result[index-hwsize:index+hwsize+1]))
-    # TODO
+            if cword == padding: continue
+            contexts_local[word][cword] += 1
 
 def fetch_contexts(x):
     global contexts_clear, contexts_local
@@ -407,14 +408,15 @@ class WikiCorpus(TextCorpus):
         #
         if self.wikiflag:
             texts = ((text, self.lemmatize, title, pageid) for title, text, pageid in extract_pages(bz2.BZ2File(self.fname), self.filter_namespaces))
-        else:
-            global stoplist
-            stoplist = set([])
-            tfile = open(self.fname, 'r')
-            texts = ((line, self.lemmatize, "title", "pageid") for line in tfile)
-            self.processes = 1 #TODO
+        #else:
+        #    global stoplist
+        #    stoplist = set([])
+        #    tfile = open(self.fname, 'r')
+        #    texts = ((line, self.lemmatize, "title", "pageid") for line in tfile)
+        #    self.processes = 2 #TODO
         #
-        print("--------", self.processes)
+
+        logger.info("Number of processes %d" % self.processes)
 
         pool = multiprocessing.Pool(self.processes)
         # process the corpus in smaller chunks of docs, because multiprocessing.Pool
@@ -429,7 +431,7 @@ class WikiCorpus(TextCorpus):
             # combining the contexts
             if index % fetch_frequency == 0:
                 merge_contexts()
-          #  if index >= 100000: break
+        #    if index >= 100000: break
         #
         merge_contexts()
         pool.terminate()

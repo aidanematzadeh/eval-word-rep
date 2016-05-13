@@ -17,17 +17,22 @@ if __name__ == "__main__":
     argparser = argparse.ArgumentParser()
     argparser.add_argument("nelson", type=str, help="Input Neslon norms path or pickle file.")
     argparser.add_argument("word2vec", type=str, help="Input word2vec path or pickle file.")
-    argparser.add_argument("lda", type=str, help="the LDA model")
-    argparser.add_argument("ldawords", type=str, help="the LDA words")
+    argparser.add_argument("ldamodel", type=str, help="the LDA model")
+    argparser.add_argument("wikiwords", type=str, help="wiki words file *.mm_wordids*")
+    argparser.add_argument("commonwords", type=str, help="common words pickle")
     argparser.add_argument("outdir", default='', help="Directory to place output files. (default='')")
     args = argparser.parse_args()
 
-    process = ProcessData(args.nelson, args.word2vec, args.ldawords, args.outdir)
+    process = ProcessData(args.nelson, args.word2vec, args.wikiwords,\
+            args.outdir, args.commonwords)
     norms_fsg = process.norms_fsg
     word2vec_cond = process.word2vec_cond
     word2vec_cos = process.word2vec_cos
     common_words = process.common_words
-    lda = process.read_lda(args.lda, norms_fsg, common_words)
+
+    norm2doc_path = args.wikiwords.split("_")[0] + ".norm2doc"
+    corpus_path =  args.wikiwords.split("_")[0]
+    lda = process.read_lda(args.ldamodel, norm2doc_path, corpus_path, norms_fsg, common_words)
 
     pairs = process.get_pairs(norms_fsg, common_words)
     print("number of pairs", len(pairs))
@@ -58,8 +63,7 @@ if __name__ == "__main__":
                         print(pairs[index], asyms[b]["norms"][index], asyms[b][stype][index])
             print()
 
-    asym = None
-    tuples = process.get_tuples(norms_fsg, lda)
+    tuples = process.get_tuples(norms_fsg, common_words)
     print("Number of tuples", len(tuples))
     #
     print("Triangle Inequality")
@@ -87,10 +91,24 @@ if __name__ == "__main__":
 
 
     print("Associations")
+    print("Overal correlations among associations")
+    #
+    cuetarget_pairs = process.get_ct_pairs(norms_fsg, common_words)
+    print("Number of cue target pairs % d" % len(cuetarget_pairs))
+    assocs = defaultdict_list()
+    for stype, scores in evallist:
+        assocs[stype] = process.get_ct_scores(scores, cuetarget_pairs)
+    for stype in assocs:
+        rho = evaluate.rank_correlation(assocs["norms"], assocs[stype])
+        print("correlation between norms and %s: (%.2f, %.2f)" % (stype, rho[0], rho[1]))
+
+
+
+
     # Median rank of associates
     # Sort the norm associates
+    print("Median Rank")
     gold_associates = evaluate.sort_scores(norms_fsg)
-
     for stype, scores in evallist:
         # Sort the word2vec asscociates
         scores_sorted = evaluate.sort_scores(scores)

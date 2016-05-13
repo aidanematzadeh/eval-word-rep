@@ -4,6 +4,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import operator
+import numpy
 
 class Evaluation:
     """
@@ -48,11 +49,10 @@ class Evaluation:
         return
 
 
-    def traingle_inequality_threshold(self, tuples, scores, thresholds):
+    def traingle_inequality_threshold(self, tuples, scores, common_words, thresholds=None):
         """
         Find the pairs such that P(w2|w1) and P(w3|w2) are greater than the threshold;
         plot the distribution of P(w3|w1).
-
 
         Traingle inequaliy: P(w2|w1) + P(w3|w2) >= P(w3|w1)
 
@@ -62,9 +62,19 @@ class Evaluation:
         differences holds P(w2|w1) + P(w3|w2) - P(w3|w1)
 
         """
+        values = []
+        for cue in scores:
+            if cue in common_words:
+                values += list(scores[cue].values())
+
+        thresholds = [numpy.percentile(values, 97)]
+        thresholds.append(numpy.percentile(values, 95))
+        thresholds.append(numpy.percentile(values, 93))
+        thresholds.append(numpy.percentile(values, 91))
+        #print("------", thresholds)
+
         prob_dist_thresh = {}
-        differences = []
-        ratios = []
+        differences, ratios = [] , []
         for t in thresholds:
             prob_dist_thresh[t] = []
 
@@ -85,15 +95,24 @@ class Evaluation:
     def plot_traingle_inequality(self, dist, name):
         fig = plt.figure()
         ax = fig.add_subplot(111)
-        #
         for thres in sorted(dist.keys()):
             print(name, thres, len(dist[thres]))
-            print(ax.hist(dist[thres], label=str(thres), normed=True))
+            ax.hist(dist[thres], label=str(thres))
         #ax.set_ylim(0, 10)
         #ax.set_xlim(0, 0.0001)
-
         ax.legend()
-        fig.savefig(name)
+        fig.savefig(name.replace('.',''))
+        #
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+        for thres in sorted(dist.keys()):
+            print(name, thres, len(dist[thres]))
+            ax.hist(dist[thres], label=str(thres), normed=True)
+        #ax.set_ylim(0, 10)
+        #ax.set_xlim(0, 0.0001)
+        ax.legend()
+        fig.savefig(name.replace('.','') + "_normed.png")
+
 
     def sort_scores(self, scores):
         sorted_scores = {}

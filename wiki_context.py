@@ -31,12 +31,12 @@ if __name__ == "__main__":
     logger.info("norm list %d" % len(norms_fsg))
 
 
-    wiki = wikicorpus.WikiCorpus(wikipath, norms, wsize=10, norm2docfile=outpath+".norm2doc", wikiflag=False)
+    wiki = wikicorpus.WikiCorpus(wikipath, norms, wsize=10, norm2docfile=outpath+".norm2doc", wikiflag=True)
     # This was a harsh filtering:
     #wiki.dictionary.filter_extremes(no_below=20, no_above=0.1, keep_n=DEFAULT_DICT_SIZE)
     #
     logger.info("filtering extremes keeping %d" % DEFAULT_DICT_SIZE)
-    wiki.dictionary.filter_extremes(no_below=20, no_above=1, keep_n=DEFAULT_DICT_SIZE)
+    wiki.dictionary.filter_extremes(no_below=5, no_above=1, keep_n=DEFAULT_DICT_SIZE)
 
     # save dictionary and bag-of-words (term-document frequency matrix)
     gensim.corpora.MmCorpus.serialize(outpath, wiki, progress_cnt=10000)

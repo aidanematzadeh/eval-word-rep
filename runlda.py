@@ -75,7 +75,7 @@ if __name__ == '__main__':
     argparser = argparse.ArgumentParser()
     argparser.add_argument("corpus", type=str, help="Input corpus filename.")
     argparser.add_argument("vocabs", help="Vocabulary filename.")
-    argparser.add_argument("-o", "--outdir", default='', help="Directory to place output files. (default='')")
+    argparser.add_argument("outdir", default='', help="Directory to place output files. (default='')")
     args = argparser.parse_args()
 
     logger = logging.getLogger('LDA Master')
@@ -94,10 +94,10 @@ if __name__ == '__main__':
     logger.addHandler(ch)
 
     # Parameter search
-    num_topics = numpy.arange(10, 100, 10) #
-    batch_size = numpy.arange(1, 100, 50)
-    tau = numpy.arange(10, 100, 10)
-    kappa = numpy.arange(0.5, 1, 0.1)
+    num_topics = numpy.arange(30, 100, 20) # numpy.arange(10, 100, 20) #
+    batch_size = numpy.arange(300, 600, 100) #numpy.arange(1, 500, 100)
+    tau = numpy.arange(1, 100, 30)
+    kappa = numpy.arange(0.5, 1, 0.3)
 
     pairs = itertools.product(num_topics, batch_size, tau, kappa)
     logger.info("number of parameters: %d" % len(num_topics) * len(batch_size))
