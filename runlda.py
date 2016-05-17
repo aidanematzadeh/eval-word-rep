@@ -14,14 +14,17 @@ import os
 import numpy
 import multiprocessing
 import itertools
-import pickle
 #import sys
+#from pprint import pprint
+
 
 def get_chunks(iterable, chunks=1):
     lst = list(iterable)
     return [lst[i::chunks] for i in range(chunks) if len(lst[i::chunks]) > 0]
 
 marked = set([])
+lock_dir = "/opt/tools/amint/lockfiles/"
+
 def ldaworker(arguments):
     pairs, args = arguments
     corpus = gensim.corpora.MmCorpus(args.corpus)
@@ -34,12 +37,14 @@ def ldaworker(arguments):
     for num_topics, batch_size, tau, kappa in pairs:
         #tau = 1.0 #offset
         #kappa = 0.5 #decay
-        if (num_topics, batch_size, tau, kappa) in marked: continue
-
+        passes=2 # Default value is one
+        #
         fname = "topics-%d-bsize-%d-tau-%f-kappa-%f" % (num_topics, batch_size, tau, kappa)
+        lockfile =(lock_dir + args.corpus.replace("/", "-") + "-" + fname)
+        if os.path.exists(lockfile): continue
+        open(lockfile,'w').close()
         #
         logger = logging.getLogger('LDA Worker %d' % os.getpid())
-        #logger.setLevel(logging.INFO)
         fh = logging.FileHandler(args.outdir + '/ldaworker-%d-%s.log' % (os.getpid(), fname) )
         fh.setLevel(logging.INFO)
         ch = logging.StreamHandler()
@@ -47,9 +52,7 @@ def ldaworker(arguments):
         formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
         fh.setFormatter(formatter)
         ch.setFormatter(formatter)
-        #logger.addHandler(fh)
         logger.addHandler(ch)
-        #
         rootlog = logging.getLogger()
         rootlog.addHandler(fh)
         rootlog.setLevel(logging.INFO)
@@ -58,18 +61,16 @@ def ldaworker(arguments):
         logger.info("corpus info %s" % corpus.__str__())
         logger.info("vocab info %s" % id2word.__str__())
         logger.info("topics-%d-bsize-%d-tau-%f-kappa-%f" % (num_topics, batch_size, tau, kappa))
+        logger.info("number of passes: %d" % passes)
         logger.info("creating the model")
         # Running and saving the lda moodel
-        lda = gensim.models.LdaModel(corpus=corpus, id2word=id2word, num_topics=num_topics, chunksize=batch_size, eval_every=200)
+        lda = gensim.models.LdaModel(corpus=corpus, id2word=id2word, num_topics=num_topics, chunksize=batch_size, eval_every=1000, passes=passes)
         lda.save(args.outdir + "/" + fname)
         #
         logger.info("saved the model")
         fh.flush()
         ch.flush()
         #
-        marked.add((num_topics, batch_size, tau, kappa))
-        with open('marked_params.pickle' ,'wb') as output:
-            pickle.dump(marked, output)
 
 if __name__ == '__main__':
     argparser = argparse.ArgumentParser()
@@ -94,14 +95,21 @@ if __name__ == '__main__':
     logger.addHandler(ch)
 
     # Parameter search
-    num_topics = numpy.arange(30, 100, 20) # numpy.arange(10, 100, 20) #
-    batch_size = numpy.arange(300, 600, 100) #numpy.arange(1, 500, 100)
-    tau = numpy.arange(1, 100, 30)
-    kappa = numpy.arange(0.5, 1, 0.3)
+    #num_topics = numpy.arange(30, 100, 100) # numpy.arange(10, 100, 20) #
+    #batch_size = numpy.arange(300, 400, 100) #numpy.arange(1, 500, 100)
+    #tau = numpy.arange(1, 2, 30)
+   # kappa = numpy.arange(0.5, 1, 1) #decay
+
+    num_topics = numpy.arange(20, 100, 20) # numpy.arange(10, 100, 20) #
+    batch_size = [1, 4, 16, 64, 256, 512]#, 1024] ##numpy.arange(300, 400, 100) #numpy.arange(1, 500, 100)
+    tau = [1, 4, 16, 64, 256, 512]#, 1024] #numpy.arange(1,10 , 30) #downweights early iterations
+    kappa = numpy.arange(0.5, 1, 0.1) #decay
+
 
     pairs = itertools.product(num_topics, batch_size, tau, kappa)
-    logger.info("number of parameters: %d" % len(num_topics) * len(batch_size))
-    chunked_pairs = get_chunks(pairs, chunks=(multiprocessing.cpu_count()-2))
+    logger.info("number of parameters: %d" % (len(num_topics) * len(batch_size) * len(tau) * len(kappa)))
+
+    chunked_pairs = get_chunks(pairs, chunks=(multiprocessing.cpu_count()))
     logger.info("chunked pairs %d" % len(chunked_pairs))
 
     pool = multiprocessing.Pool()

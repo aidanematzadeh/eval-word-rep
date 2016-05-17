@@ -89,15 +89,12 @@ class ProcessData:
         for cue in norms:
             if not cue in word_list: continue
             cue_context = []
-            #TODO
             for w in word_list:
                 cue_context.append(model.similarity(cue, w))
-            # Using words that occuerd as norms/targets with the cue
-            #p_cue = scipy.misc.logsumexp(np.asarray(list(word2vec_cos[cue].values())))
-            #
             # Using words in the word_list to normalize the prob
             p_cue = scipy.misc.logsumexp(np.asarray(cue_context))
             for target in norms[cue]:
+                if not target in word_list: continue
                 word2vec_cond[cue][target] = np.exp(word2vec_cos[cue][target] - p_cue)
 
 
@@ -248,7 +245,7 @@ class ProcessData:
 
 
 
-    def get_tuples(self, norms, word_list):
+    def get_tuples(self, norms, word_list, thresh=20):
         """ Find all the three words for which P(w2|w1), P(w3|w2), and P(w3|w1) exist
         This is equivalent to the subset of the combination of 3-length ordered tuples
         that their pairs exist in Nelson norms.
@@ -263,6 +260,8 @@ class ProcessData:
                 for w3 in norms[w2]:
                     if not w3 in word_list: continue
                     if w3 in norms[w1]:
+                        #TODO
+                        #if np.min(norms[w1][w2], norms[w2][w3])/norms[w1][w3] > thresh:
                         tuples.append((w1, w2, w3))
         return tuples
 
