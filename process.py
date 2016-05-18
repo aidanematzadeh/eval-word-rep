@@ -111,6 +111,9 @@ class ProcessData:
         """ Calculate p(target|cue) = sum_topics{p(target|topic) p(topic|cue)}
             p(topic|cue) = theta_cue[topic] because document is the cue
         """
+        outname = ldapath + ".pickle"
+        if os.path.exists(outname):
+            return self.load_scores(outname)
 
         lda = gensim.models.LdaModel.load(ldapath)
         word2id =  {}
@@ -119,7 +122,7 @@ class ProcessData:
 
         # Getting the topic-word probs
         topics =  lda.state.get_lambda()
-        #Normalize the topic-word probs
+        # Normalize the topic-word probs
         for k in range(lda.num_topics):
             topics[k] = topics[k]/topics[k].sum()
 
@@ -147,6 +150,9 @@ class ProcessData:
                 #
                 for k in range(lda.num_topics):
                     condprob[cue][target] +=  topics[k][targetid] * doc_topics_dist[k]
+
+        with open(outname, 'wb') as output:
+            pickle.dump(condprob, output)
 
         return condprob
 
