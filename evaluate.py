@@ -96,8 +96,8 @@ class Evaluation:
         fig = plt.figure()
         ax = fig.add_subplot(111)
         for thres in sorted(dist.keys()):
-            print(name, thres, len(dist[thres]))
-            ax.hist(dist[thres], label=str(thres))
+            #print(name, thres, len(dist[thres]))
+            ax.hist(dist[thres], label="%.2f" %(thres))
         #ax.set_ylim(0, 10)
         #ax.set_xlim(0, 0.0001)
         ax.legend()
@@ -106,7 +106,7 @@ class Evaluation:
         fig = plt.figure()
         ax = fig.add_subplot(111)
         for thres in sorted(dist.keys()):
-            print(name, thres, len(dist[thres]))
+            #print(name, thres, len(dist[thres]))
             ax.hist(dist[thres], label=str(thres), normed=True)
         #ax.set_ylim(0, 10)
         #ax.set_xlim(0, 0.0001)
