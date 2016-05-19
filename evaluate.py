@@ -95,9 +95,14 @@ class Evaluation:
     def plot_traingle_inequality(self, dist, name):
         fig = plt.figure()
         ax = fig.add_subplot(111)
+        patterns = ('', '+', '*', '\\', '*', 'o', 'O', '.')
+
+        #colormapname = "YlGnBu"
+        index = 0
         for thres in sorted(dist.keys()):
             #print(name, thres, len(dist[thres]))
-            ax.hist(dist[thres], label="%.2f" %(thres))
+            ax.hist(dist[thres], label="%.5f" %(thres), hatch = patterns[index])#, color=plt.get_cmap(colormapname))
+            index +=1
         #ax.set_ylim(0, 10)
         #ax.set_xlim(0, 0.0001)
         ax.legend()
@@ -105,11 +110,10 @@ class Evaluation:
         #
         fig = plt.figure()
         ax = fig.add_subplot(111)
+        index = 0
         for thres in sorted(dist.keys()):
-            #print(name, thres, len(dist[thres]))
-            ax.hist(dist[thres], label=str(thres), normed=True)
-        #ax.set_ylim(0, 10)
-        #ax.set_xlim(0, 0.0001)
+            ax.hist(dist[thres], label="%0.5f"% (thres), normed=True, hatch= patterns[index])#, color=plt.get_cmap(colormapname))
+            index += 1
         ax.legend()
         fig.savefig(name.replace('.','') + "_normed.png")
 
