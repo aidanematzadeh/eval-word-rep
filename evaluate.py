@@ -104,7 +104,7 @@ class Evaluation:
             ax.hist(dist[thres], label="%.5f" %(thres), hatch = patterns[index])#, color=plt.get_cmap(colormapname))
             index +=1
         #ax.set_ylim(0, 10)
-        #ax.set_xlim(0, 0.0001)
+        ax.set_xlim(xmin=0)
         ax.legend()
         fig.savefig(name.replace('.',''))
         #
@@ -114,6 +114,7 @@ class Evaluation:
         for thres in sorted(dist.keys()):
             ax.hist(dist[thres], label="%0.5f"% (thres), normed=True, hatch= patterns[index])#, color=plt.get_cmap(colormapname))
             index += 1
+        ax.set_xlim(xmin=0)
         ax.legend()
         fig.savefig(name.replace('.','') + "_normed.png")
 
