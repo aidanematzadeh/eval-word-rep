@@ -5,9 +5,34 @@ Maps words to ids and keeps the dictionary.
 """
 
 import sys
-import numpy as np
+#import numpy as np
 import collections
 from collections import defaultdict
+
+def cumulative_dist(vocab, power=0.75, domain=2**31 - 1):
+        """
+        Create a cumulative-distribution table using stored vocabulary word counts for
+        drawing random words in the negative-sampling training routines.
+        Adopted from gensim.
+
+        To draw a word index, choose a random integer up to the maximum value in the
+        table (cum_table[-1]), then finding that integer's sorted insertion point
+        (as if by bisect_left or ndarray.searchsorted()). That insertion point is the
+        drawn index, coming up in proportion equal to the increment at that slot.
+        """
+        vocab_size = len(vocab)
+        cum_dist = zeros(vocab_size, dtype=uint32)
+        # compute sum of all power (Z in paper)
+        normalization = float(sum([self.vocab[word].count**power for word in self.vocab]))
+        cumulative = 0.0
+        for word_index in range(vocab_size):
+            cumulative += self.vocab[self.index2word[word_index]].count**power / train_words_pow
+            self.cum_table[word_index] = round(cumulative * domain)
+        if len(self.cum_table) > 0:
+            assert self.cum_table[-1] == domain
+
+
+def generate_negative_examples():
 
 def get_positive_context(input_file, wsize):
     global_counts = defaultdict(lambda: defaultdict(int))
@@ -55,6 +80,9 @@ if __name__ == "__main__":
     wsize = 5 # The size of the context window from each side
 
     global_counts, word2index = get_positive_context(input_file, wsize)
+
+    vocab_count = [global_counts[i][i] for i in global_counts]
+    print("vocab count", vocab_count)
 
     words_str= ""
     # Writing the positive examples and the dictionary
