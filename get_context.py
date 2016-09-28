@@ -9,38 +9,25 @@ import numpy as np
 import collections
 from collections import defaultdict
 
-#check the number of unique words
-
-if __name__ == "__main__":
-
-    # Read file path for different resources
-    input_file = sys.argv[1]
-#    context_dir = sys.argv[3]
-
-    wsize = 5 # The size of the context window from each side
+def get_positive_context(input_file, wsize):
     global_counts = defaultdict(lambda: defaultdict(int))
     dictionary = dict()
     with open(input_file) as f:
         for counter, doc in enumerate(f):
-            if ((counter+1) % 100 == 0):
+            if ((counter+1) % 3 == 0):
                 print("document processed %d" % counter)
                 print("number of vocabulary %d" % len(dictionary))
                 #print(sorted(dictionary.keys()))
+                break #TODO
 
-            nodes = []
-            # Adding padding to the beginning and end of the text
-            for i in range(0, wsize):
-                nodes.append("_PAD_")
-            nodes += doc.split()
-            for i in range(0, wsize):
-                nodes.append("_PAD_")
+            # Getting the words and adding padding
+            words = doc.split()
+            words = ["_PAD_"] * wsize + words + ["_PAD"] * wsize
             # Collecing the context of each words
-            contexts = dict()
-            for index in range(len(nodes)):
-                w = nodes[index]
-                if not w in contexts:
-                    contexts[w] = ""
-                contexts[w] += " "+ ' '.join(nodes[index-wsize:index+wsize+1])
+            contexts = defaultdict(str)
+            for index in range(len(words)):
+                w = words[index]
+                contexts[w] += " "+ ' '.join(words[index-wsize:index+wsize+1])
 
             contexts.pop("_PAD_", None)
             # Counting the words in the context of each word and adding them to its global counts
@@ -52,14 +39,43 @@ if __name__ == "__main__":
                 if not w in dictionary:
                     dictionary[w] = len(dictionary)
                 w_index = dictionary[w]
-                #print(w, context_counts)
                 for cw, count in context_counts.items():
                     if not cw in dictionary:
                         dictionary[cw] = len(dictionary)
                     cw_index = dictionary[cw]
                     global_counts[w_index][cw_index] += count
-                    #print(w_index, w, cw, global_counts[w_index][cw_index])
-            #
+                #    print(w_index, w, cw, global_counts[w_index][cw_index])
+    return global_counts, dictionary
+
+if __name__ == "__main__":
+
+    # Read file path for different resources
+    input_file = sys.argv[1]
+    output_file = sys.argv[2]
+    wsize = 5 # The size of the context window from each side
+
+    global_counts, word2index = get_positive_context(input_file, wsize)
+
+    words_str= ""
+    # Writing the positive examples and the dictionary
+    idf = open(output_file + "postive_ids", 'w')
+    cntf= open(output_file + "postive_counts", 'w')
+    for w in word2index.keys():
+        w_index = word2index[w]
+        w_ids = ""
+        w_counts = ""
+        words_str += "%s %d %d\n" % (w, w_index, global_counts[w_index][w_index])
+        for cw_index in global_counts[w_index]:
+            w_ids += "%d " % cw_index
+            w_counts += "%d " % global_counts[w_index][cw_index]
+        idf.write(w_ids + "\n")
+        cntf.write(w_counts + "\n")
+    idf.close()
+    cntf.close()
+
+    with open(output_file + "word2id", 'w') as w2idf:
+        w2idf.write(words_str)
+
 """
         print("start writing context in file")
         for word in context_word:
