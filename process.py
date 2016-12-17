@@ -4,7 +4,6 @@ import numpy as np
 import scipy.io as sio
 import scipy
 import pickle
-from collections import defaultdict
 import os.path
 
 # Reads and process data used in the evaluation.
@@ -16,8 +15,6 @@ def load_scores(path):
         scores = pickle.load(f)
     return scores
 
-def defaultdict_float():
-    return defaultdict(float)
 
 def get_norms(picklefilename, norms_path=None):
     """ Read Nelson norms for the evaluation methods.
@@ -29,7 +26,7 @@ def get_norms(picklefilename, norms_path=None):
         return load_scores(picklefilename)
 
     # The value of zero means that the norms[cue][target] does not exist.
-    norms = defaultdict(defaultdict_float)
+    norms = {}
     for filename in os.listdir(norms_path):
         norm_file = open(norms_path + "/" + filename, 'r', encoding = "ISO-8859-1")
         norm_file.readline()
@@ -37,6 +34,8 @@ def get_norms(picklefilename, norms_path=None):
             nodes = line.strip().split(',')
             cue = nodes[0].strip().lower()
             target = nodes[1].strip().lower()
+
+            if not cue in norms: norms[cue] = {}
             # Check if the cue, target pair is normed that is p(cue|target) also exists
             # The next line was used in NIPS submission. Commented in Oct 2016.
             #if nodes[2].strip() == "YES":
@@ -60,18 +59,25 @@ def get_cbow(cbow_cos_path, cbow_cond_path, norms=None, cbow_binary=None):
     model = gensim.models.Word2Vec.load_word2vec_format(cbow_binary, binary=True)
     print("Done loading the Gensim model.")
 
-    cbow_cos = defaultdict(defaultdict_float)
-    cbow_cond = defaultdict(defaultdict_float)
+    cbow_cos = {}
+    cbow_cond ={}
     # list of all the norms that have a CBOW rep. Used in normalization of cond prob.
     wordlist = set([])
     # Note that the cosine is the same as dot product for cbow vectors
     for cue in norms:
         if not cue in model: continue
+        if not cue in cbow_cos:
+            cbow_cos[cue] = {}
+            cbow_cond[cue] = {}
         wordlist.add(cue)
-        for target in norms[cue]:
+        for target in norms:#[cue]:
             if not target in model: continue
             wordlist.add(target)
-            if cbow_cos[cue][target] == 0:
+            if not target in cbow_cos:
+                cbow_cos[target] = {}
+                cbow_cond[target] = {}
+            #
+            if not target in cbow_cos[cue]:
                 cbow_cos[cue][target] = model.similarity(cue, target)
                 cbow_cos[target][cue] = cbow_cos[cue][target]
 
@@ -91,11 +97,11 @@ def get_cbow(cbow_cos_path, cbow_cond_path, norms=None, cbow_binary=None):
     with open(cbow_cos_path, 'wb') as output:
         pickle.dump(cbow_cos, output)
 
-    print("cosine size %d norms size %d cond size %d", (len(cbow_cos), len(norms), len(cbow_cond)))
+    print("cosine size %d norms size %d cond size %d" % (len(cbow_cos), len(norms), len(cbow_cond)))
 
     return cbow_cos, cbow_cond
 
-def get_lda(lda_path, norms=None, vocab_path=None, lambda_path=None, gamma_path=None):
+def get_lda(lda_path, norms=None, vocab_path=None, lambda_path=None, gamma_path=None, mu_path=None):
     """ Get the cond prob for word representations learned using Hoffman-VBLDA-based code.
         Calculate p(target|cue) = sum_topics{p(target|topic) p(topic|cue)}
         p(topic|cue) = theta_cue[topic] because document is the cue
@@ -104,46 +110,54 @@ def get_lda(lda_path, norms=None, vocab_path=None, lambda_path=None, gamma_path=
     if os.path.exists(lda_path):
         return load_scores(lda_path)
 
-    word2id, id2word = {}, {}
+    word2id ={}
+    #norm2id = {} #TODO
     with open(vocab_path, 'r') as f:
         for line in f:
-            word2id[line.split()[0]] = int(line.split()[1])
-            id2word[int(line.split()[1])] = line.split()[0]
+            word2id[line.split()[0]] = int(line.split()[1]) #TODO index 2 --> 1
+
+
+            #word2id[line.split()[0]] = int(line.split()[2]) #TODO index 2 --> 1
+            #norm2id[line.split()[0]] = int(line.split()[1]) #TODO
 
     # Getting the topic-word probs -- p(topic|cue)
-    topics = (np.loadtxt(lambda_path)).T
-    print("lambda", topics.shape)
+    topics = np.loadtxt(lambda_path)
     num_topics = topics.shape[0]
     print("number of topics %d" % num_topics)
-    # Normalize the topic-word probs
-    for k in range(len(topics)):
-        topicsk = list(topics[k, :])
-        topics[k] = topicsk / sum(topicsk)
+    print("lambda", topics.shape)
 
-    print("topics", topics)
-    #
+    # Normalize the topic-word probs
+    if mu_path == None:
+        for k in range(num_topics):
+            topics[k] = topics[k] / sum(topics[k])
+    else:
+        mu = (np.loadtxt(mu_path))
+        for k in range(num_topics):
+            denom = topics[k] + mu[k]
+            topics[k] = topics[k] / denom
+            assert sum(topics[k] + (mu[k] / denom)) == len(word2id)
+
     gamma = np.loadtxt(gamma_path)
     print("gamma", gamma.shape)
-    print("Gamma", gamma)
-    #
-    condprob = defaultdict(defaultdict_float)
-    import math #TODO
+
+    condprob = {}
     for cue in norms:
         if not (cue in word2id.keys()): continue
+        if not cue in condprob:
+            condprob[cue] = {}
+        #
         # Topic distribution of the document associated with cue
         cueid = word2id[cue] #TODO would this be true
+        #cueid = norm2id[cue] # Remove this #TODO
+        #
         cue_topics_dist = gamma[cueid] / sum(gamma[cueid])  # normalize distribution
-        print(cueid, sum(gamma[cueid]),sum(gamma[cueid,:]))
-        for target in norms[cue]:
+        for target in norms:#[cue]: #TODO should we add the norms[cue] too?
             if not (target in word2id.keys()): continue
+            if not (target in condprob[cue]):
+                condprob[cue][target] = 0
             targetid = word2id[target]
-            #
             for k in range(num_topics):
                 condprob[cue][target] +=  topics[k][targetid] * cue_topics_dist[k]
-
-            #TODO
-            if math.isnan(condprob[cue][target]):
-                print(cue, target, condprob[cue][target])
 
     with open(lda_path, 'wb') as output:
         pickle.dump(condprob, output)
@@ -159,11 +173,15 @@ def get_allpairs(allpairs_path, norms, cbow=None, lda=None):
 
     allpairs = []
     normpairs = []
+
     for cue in norms:
         for target in norms[cue]:
             normpairs.append((cue, target))
-            if cbow != None and cbow[cue][target] == 0: continue
-            if lda != None and lda[cue][target] == 0: continue
+            if cbow != None and not (cue in cbow) or not (target in cbow[cue]):
+                continue
+            if lda != None and not (cue in lda) or not (target in lda[cue]):
+                continue
+
             allpairs.append((cue, target))
 
     print("cues and targets in norms %d" % len(normpairs))
@@ -175,6 +193,7 @@ def get_allpairs(allpairs_path, norms, cbow=None, lda=None):
     with open(allpairs_path, 'wb') as output:
         pickle.dump(allpairs, output)
     return allpairs
+
 
 #TODO need to rewrite
 def read_gensimlda(ldapath, norm2doc_path, corpus_path, norms, word_list):
@@ -209,9 +228,11 @@ def read_gensimlda(ldapath, norm2doc_path, corpus_path, norms, word_list):
     #for i in range(lda.num_terms):
     #    wordprob[i] = np.sum(topics[:,i]) # this should be multiplied with the topic prob
 
-    condprob = defaultdict(lambda: defaultdict(float))
+    condprob = {}
     for cue in norms:
         if not (cue in word_list): continue
+        if not cue in condprob:
+            condprob[cue] = []
         #cueid = word2id[cue]
         # Topic distribution of the document associated with cue
         doc_id = norm2doc[cue.encode()][0]
@@ -231,11 +252,11 @@ def read_gensimlda(ldapath, norm2doc_path, corpus_path, norms, word_list):
 
     return condprob
 
-def get_pair_scores(scores, ctpairs):
+def get_pair_scores(scores, allpairs):
     """ Return the cue-target scores
     """
     pair_scores = []
-    for cue, target in ctpairs:
+    for cue, target in allpairs:
         pair_scores.append(scores[cue][target])
     return pair_scores
 
@@ -244,8 +265,11 @@ def get_asym_pairs(norms, allpairs):
     """
     assym_pairs = set()
     for cue, target in allpairs:
-        if norms[cue][target] !=0 and norms[target][cue] !=0:
-            assym_pairs.add((min(cue,target), max(cue,target)))
+        if not(cue in norms and target in norms[cue]): continue
+        if not(target in norms and cue in norms[target]): continue
+        #
+        #if norms[cue][target] !=0 and norms[target][cue] !=0:
+        assym_pairs.add((min(cue,target), max(cue,target)))
     return list(assym_pairs)
 
 def get_tuples(norms, allpairs):
@@ -253,6 +277,7 @@ def get_tuples(norms, allpairs):
     This is equivalent to the subset of the combination of 3-length ordered tuples
     that their pairs exist in Nelson norms.
     """
+    #TODO make faster
     tuples = []
     for w1 in norms:
         for w2 in norms[w1]:
@@ -276,10 +301,6 @@ def read_filter_words(filename):
     for f in filters:
         words.append(f.tolist()[0].lower())
     return words
-
-
-
-
 
 def mm2dt(mmcorpus_path, vocab_path):
     """ Read a mmcorpus file and write it as a doc-term matrix """
