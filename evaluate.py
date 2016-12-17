@@ -6,13 +6,13 @@ import operator
 import numpy
 
 
-def rank_correlation(self, list1, list2):
+def rank_correlation(list1, list2):
     """
     Calculate the ranked correlation between items that between the two list of scores.
     """
     return scipy.stats.spearmanr(list1, list2)
 
-def asymmetry(self, scores, pairs):
+def asymmetry(scores, pairs):
     """
     Find the ratio of p(w1|w2)/p(w2|w1) and p(w1|w2)-p(w2|w1) for each pair in pairs.
     """
@@ -27,8 +27,8 @@ def asymmetry(self, scores, pairs):
             ratios.append(float('inf'))
     return ratios, differences
 
-
-def traingle_inequality_threshold(self, tuples, scores, common_words, thresholds=None):
+#TODO
+def traingle_inequality_threshold(tuples, scores, common_words, thresholds=None):
     """
     Find the pairs such that P(w2|w1) and P(w3|w2) are greater than the threshold;
     plot the distribution of P(w3|w1).
@@ -71,7 +71,7 @@ def traingle_inequality_threshold(self, tuples, scores, common_words, thresholds
     return prob_dist_thresh, ratios, differences
 
 
-def plot_traingle_inequality(self, dist, name):
+def plot_traingle_inequality(dist, name):
     fig = plt.figure()
     ax = fig.add_subplot(111)
     patterns = ('', '+', '*', '\\', '*', 'o', 'O', '.')
@@ -98,31 +98,54 @@ def plot_traingle_inequality(self, dist, name):
     fig.savefig(name.replace('.','') + "_normed.png")
 
 
-def sort_scores(self, scores):
+def sort_pairs(scores, allpairs):
     """ For each key in dictionary, sort the items associated with it """
     sorted_scores = {}
-    for cue in scores:
-        sorted_scores[cue] = sorted(scores[cue].items(), key=operator.itemgetter(1), reverse=True)
+    for cue, target in allpairs:
+        if not cue in sorted_scores:
+            sorted_scores[cue] = {}
+        sorted_scores[cue][target] = scores[cue][target]
+
+    for cue in sorted_scores.keys():
+        sorted_scores[cue] = sorted(sorted_scores[cue].items(), key=operator.itemgetter(1), reverse=True)
+
+    return sorted_scores
+
+def sort_all(scores, norms, commonwords):
+    sorted_scores = {}
+    for cue1 in norms.keys():
+        if not (cue1 in commonwords):
+            continue
+        for cue2 in norms.keys():
+            if not (cue2 in commonwords):continue
+            if cue1==cue2: continue
+            if not cue1 in sorted_scores:
+                sorted_scores[cue1] = {}
+            sorted_scores[cue1][cue2] = scores[cue1][cue2]
+
+    for cue in sorted_scores.keys():
+        sorted_scores[cue] = sorted(sorted_scores[cue].items(), key=operator.itemgetter(1), reverse=True)
     return sorted_scores
 
 
-def median_rank(self, gold, scores, word_list,  n=3):
+def median_rank(gold, scores,  n=3):
     """ calculate the median rank of the first n associates """
-    ranks = {}
+    ranks, maxranks = {} , {}
     for r in range(n):
         ranks[r] = []
+        maxranks[r] = []
 
     for cue in gold:
-        if not cue in word_list: continue
         for index in range(min(len(gold[cue]), n)):
             target = gold[cue][index][0]
-            if not target in word_list:continue
+
             for j in range(len(scores[cue])):
                 if scores[cue][j][0] == target:
                     ranks[index].append(j+1)
-                    #ranks[index].append(len(scores[cue]))
                     break
-    return ranks
+
+            maxranks[index].append(len(scores[cue]))
+    return ranks, maxranks
 
 
 
