@@ -16,11 +16,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import sys
 import numpy as n
 from scipy.special import gammaln, psi
-import matplotlib.pyplot as plt
-
 
 n.random.seed(100000001)
 meanchangethresh = 0.001
@@ -53,8 +50,7 @@ class OnlineLDA:
         """
         Arguments:
         K: Number of topics
-        vocab: A set of words to recognize. When analyzing documents, any word
-           not in this set will be ignored.
+        vocab: A word2id mapping.
         D: Total number of documents in the population. For a fixed corpus,
            this is the size of the corpus. In the truly online setting, this
            can be an estimate of the maximum number of documents that
@@ -69,11 +65,6 @@ class OnlineLDA:
         set kappa=0 this class can also be used to do batch VB.
         """
         self._vocab = vocab
-        #dict()
-        #for word in vocab:
-        #    word = word.lower()
-        #    word = re.sub(r'[^a-z]', '', word)
-        #    self._vocab[word] = len(self._vocab)
 
         self._K = K
         self._W = len(self._vocab)
@@ -91,8 +82,17 @@ class OnlineLDA:
 
         # Initialize the variational distribution q(beta|lambda)
         #change
+        #self._lambda = n.zeros((self._K, self._W)) + 0.0001 #
         self._lambda = 1*n.random.gamma(100., 1./100., (self._K, self._W))
-        self._mu =  1*n.random.gamma(100., 1./100., (self._K, self._W))
+        #TODO n.random.beta(eta, zeta
+        #1*n.random.gamma(100., 1./100., (self._K, self._W))
+        #self._mu =  n.ones((self._K, self._W))#
+        self._mu = 1*n.random.gamma(100., 1./100., (self._K, self._W))
+
+        print("lambda", self._lambda[0])
+        print("mu", self._mu[0])
+
+        #
         #self._Elogbeta = dirichlet_expectation(self._lambda)
         #change
         self._posElogbeta = beta_expectation(self._lambda, self._lambda + self._mu) # K X W
@@ -101,9 +101,11 @@ class OnlineLDA:
         self._negElogbeta = beta_expectation(self._mu, self._lambda + self._mu) # K X W
         self._negExpElogbeta = n.exp(self._negElogbeta)
         #
-        print("1-E[logbeta]", 1 - self._posElogbeta[0][1:10])
-        print("E[1-logbeta]", self._negElogbeta[0][1:10])
+        print("E[log beta]", self._posElogbeta[0][1:10])
+        print("exp(E[log beta])", self._posExpElogbeta[0][1:10])
 
+        print("E[log (1-beta)]", self._negElogbeta[0][1:10])
+        print("exp E[log (1-beta)]", self._negExpElogbeta[0][1:10])
 
     def do_e_step(self, pos_wordids, pos_wordcts, neg_wordids, neg_wordcts):
         batchD = len(pos_wordids)
@@ -117,7 +119,6 @@ class OnlineLDA:
         neg_sstats = n.zeros(self._lambda.shape)
 
         # Now, for each document d update that document's gamma and phi
-        it = 0
         meanchange = 0
         for d in range(0, batchD):
             # These are mostly just shorthand (but might help cache locality)
@@ -127,16 +128,17 @@ class OnlineLDA:
             neg_ids = neg_wordids[d]
             neg_cts = neg_wordcts[d]
             #
+            #print("pos ids %d, neg ids %d" % (len(pos_ids), len(neg_ids)))
+            #print("pos cts %d, neg cts %d" % (sum(pos_cts), sum(neg_cts)))
+
             gammad = gamma[d, :]
             Elogthetad = Elogtheta[d, :]
             expElogthetad = expElogtheta[d, :]
             #
+            # topics
             pos_expElogbetad = self._posExpElogbeta[:, pos_ids]
-            # E[log(1-beta)] = 1 - E[log beta]
-            #neg_expElogbetad = 1 - self._expElogbeta[:, neg_ids]
             neg_expElogbetad = self._negExpElogbeta[:, neg_ids]
 
-            #
             # The optimal phi_{dwk} is proportional to
             # expElogthetad_k * expElogbetad_w. phinorm is the normalizer.
             # 1 X W+
@@ -155,7 +157,7 @@ class OnlineLDA:
                         (n.dot(pos_cts / pos_phinorm, pos_expElogbetad.T) + \
                         n.dot(neg_cts / neg_phinorm, neg_expElogbetad.T))
                 #TODO check gammad
-                #gammad = self._alpha + expElogthetad * n.dot(cts / phinorm, expElogbetad.T)
+                #gammad = self._alpha + expElogthetad * n.dot(pos_cts / pos_phinorm, pos_expElogbetad.T)
                 #print("gammad", gammad[:, n.newaxis])
                 #
                 Elogthetad = dirichlet_expectation(gammad)
@@ -167,6 +169,7 @@ class OnlineLDA:
                 # If gamma hasn't changed much, we're done.
                 meanchange = n.mean(abs(gammad - lastgamma))
                 if (meanchange < meanchangethresh):
+                    print("converged %d" % d)
                     break
             gamma[d, :] = gammad
             #
@@ -183,7 +186,10 @@ class OnlineLDA:
         pos_sstats = pos_sstats * self._posExpElogbeta
         neg_sstats = neg_sstats * self._negExpElogbeta
 
-        return((gamma, pos_sstats, neg_sstats))
+        #print("pos stats",  pos_sstats[:, pos_ids])
+        #print("neg stats",  neg_sstats[:, neg_ids])
+
+        return (gamma, pos_sstats, neg_sstats)
 
 
     def update_lambda(self, pos_wordids, pos_wordcts, neg_wordids, neg_wordcts):
@@ -220,12 +226,11 @@ class OnlineLDA:
         bound = self.approx_bound(pos_wordids, pos_wordcts, neg_wordids, neg_wordcts, gamma)
         # Update lambda based on documents.
         # change
-        self._lambda = self._lambda * (1-rhot) + \
-            rhot * (self._eta + self._D * pos_sstats / len(pos_wordids))
+        self._lambda = self._lambda * (1-rhot) + rhot * (self._eta + self._D * pos_sstats / len(pos_wordids))
         #
-        self._mu =  self._mu  * (1-rhot) + \
-            rhot * (self._eta + self._D * neg_sstats / len(neg_wordids))
-
+        print("updated lambda",self._lambda[0][1:10])
+        self._mu =  self._mu  * (1-rhot) + rhot * (self._zeta + self._D * neg_sstats / len(neg_wordids))
+        print("updated mu",self._mu[0][1:10])
         #
         self._posElogbeta = beta_expectation(self._lambda, self._lambda + self._mu)
         self._posExpElogbeta = n.exp(self._posElogbeta)
@@ -254,11 +259,11 @@ class OnlineLDA:
 
         score = 0
         Elogtheta = dirichlet_expectation(gamma)
-        expElogtheta = n.exp(Elogtheta)
+        #expElogtheta = n.exp(Elogtheta)
 
         # E[log p(docs | theta, beta)]
         for d in range(0, batchD):
-            gammad = gamma[d, :]
+            #gammad = gamma[d, :]
             # Positive words
             pos_ids = pos_wordids[d]
             pos_cts = n.array(pos_wordcts[d])
@@ -302,71 +307,3 @@ class OnlineLDA:
 
         return(score)
 
-def read_data(filename):
-    data = []
-    with open(filename, 'r') as f:
-        for line in f:
-            data.append([int(i) for i in line.split()])
-    return data
-
-def read_dic(filename):
-    dic = {}
-    with open(filename, 'r') as f:
-        for line in f:
-            dic[line.split()[0]] = int(line.split()[1])
-    return dic
-
-
-
-def main():
-    #infile = sys.argv[1]
-    #K = int(sys.argv[2])
-    #alpha = float(sys.argv[3])
-    #eta = float(sys.argv[4])
-    #kappa = float(sys.argv[5])
-    #S = int(sys.argv[6])
-
-    #docs = corpus.corpus()
-    #docs.read_data(infile)
-
-    #vocab = open(sys.argv[7]).readlines()
-    #
-    filenames = sys.argv[1]
-    pos_wordids = read_data(filenames + "postive_ids")
-    pos_wordcts = read_data(filenames + "postive_counts")
-    neg_wordids = read_data(filenames + "negative_ids")
-    neg_wordcts = read_data(filenames + "negative_counts")
-
-    assert(len(pos_wordids) == len(pos_wordcts))
-    assert(len(pos_wordids[0]) == len(pos_wordcts[0]))
-    assert(len(neg_wordids) == len(neg_wordcts))
-    assert(len(neg_wordids[0]) == len(neg_wordcts[0]))
-    assert(len(pos_wordids) == len(neg_wordcts))
-
-    vocab = read_dic(filenames + "word2id")
-    #number of documents
-    doc_size = 100#len(pos_wordids)
-    #batch size
-    batch_size = 64
-
-    model = OnlineLDA(vocab, K=10, D=doc_size, alpha=0.1, eta=0.01, zeta=0.01, tau0=1, kappa=0.75)
-    i = 0
-    bounds = []
-    while i < doc_size:
-        print(i)
-        #wordids = [d.words for d in docs.docs[(i*S):((i+1)*S)]]
-        #wordcts = [d.counts for d in docs.docs[(i*S):((i+1)*S)]]
-        #TODO update to use batch size
-        nexti = i + batch_size
-        gamma, bound = model.update_lambda(pos_wordids[i:nexti], pos_wordcts[i:nexti], \
-                neg_wordids[i:nexti], neg_wordcts[i:nexti])
-        #n.savetxt('/tmp/lambda%d' % i, model._lambda.T)
-        print("approx bound", bound)
-        bounds.append(bound)
-        i = nexti #TODO end of documents will not be processed this way
-
-    plt.plot(bounds)
-    plt.savefig("plot.png")
-
-if __name__ == '__main__':
-    main()
