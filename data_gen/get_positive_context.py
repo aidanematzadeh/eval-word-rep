@@ -1,5 +1,6 @@
 """
-Run the context of (Nelson) words from each document and store them.
+Run the postive context of (Nelson) words from each document and store them.
+This code read the one billion file from wiki.
 """
 import time
 import sys
