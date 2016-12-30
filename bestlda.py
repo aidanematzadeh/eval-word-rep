@@ -9,6 +9,8 @@ from evaluate import Evaluation
 from process import ProcessData
 import os
 import multiprocessing
+#from datetime import datetime
+#import platform
 
 
 def defaultdict_list():
@@ -17,11 +19,25 @@ def defaultdict_list():
 
 def eval_ldaworker(arguments):
     args, process, evaluate, filename, norms_fsg, common_words, cuetarget_pairs = arguments
-    print("processing %s " % filename)
+    #lock_path = '/opt/tools/amint/ldalocks/' + filename
+    #pickle_path = args.ldapath + filename + '.pickle'
+    #
+    #if os.path.exists(lock_path) or os.path.exists(pickle_path):
+        #print('Already ran %s' % filename)
+        #return None, None, None, None
+    #if not os.path.exists(pickle_path):
+    #    print('Missing %s' % filename)
+    #    return None, None, None, None
+    #with open(lock_path, 'w') as f:
+    #    f.write(platform.node() + ' @ ' + str(datetime.now()) + '\n')
 
+    #print("processing %s " % filename)
     norm2doc_path = args.wikiwords.split("_")[0] + ".norm2doc"
     corpus_path =  args.wikiwords.split("_")[0]
     lda_scores = process.read_lda(args.ldapath + filename, norm2doc_path, corpus_path, norms_fsg, common_words)
+    if lda_scores == None:
+        print("lda is none")
+        return None, None, None, None
 
     asyms = evaluate.asymmetry(lda_scores, pairs)
 
@@ -50,6 +66,8 @@ if __name__ == "__main__":
     word2vec_cos = process.word2vec_cos
     common_words = process.common_words
 
+    print("number of common words", len(common_words))
+
     evaluate = Evaluation()
     pairs = process.get_pairs(norms_fsg, common_words)
     print("number of asym pairs", len(pairs))
@@ -70,10 +88,6 @@ if __name__ == "__main__":
             #            print(pairs[index], asyms[b]["norms"][index], asyms[b][stype][index])
 
     #Examine whether the traingle inequality holds
-    #thresholds = {}
-    #thresholds["norms"] = np.arange(0.45, 0.85, 0.1)
-    #thresholds["word2vec-cos"] = np.arange(0.75, 1, 0.1)
-    #thresholds["word2vec-cond"] =  np.arange(0.0002, 0.00035, 0.00005)#np.arange(0.00035, 0.00051, 0.00005)
     te = defaultdict(defaultdict_list)
     for stype, scores in evallist:
         te_dist, te["ratios"][stype], te["differences"][stype] = evaluate.traingle_inequality_threshold(tuples, \
@@ -98,6 +112,9 @@ if __name__ == "__main__":
 
     pool = multiprocessing.Pool(multiprocessing.cpu_count())
     for reasyms, rete, reassoc, filename  in pool.map(eval_ldaworker, pool_input):
+        if reasyms == None:
+            print("reasyms is none")
+            continue
         asyms["ratio"][filename], asyms["difference"][filename] = reasyms
         te_dist, te["ratios"][filename], te["differences"][filename] = rete
         assocs[filename] =  reassoc
@@ -105,10 +122,56 @@ if __name__ == "__main__":
     pool.close()
     pool.join()
 
+    #import sys
+    #sys.exit(0)
+
+    # Select the best parameter setting -- that results in the highest overall association
+    print("Associations")
+    print("Overal correlations among associations")
+    #
+    best_lda = ""
+    lda_assoc_correlations = []
+    for stype in assocs:
+        rho = evaluate.rank_correlation(assocs["norms"], assocs[stype])
+        if stype.startswith("topics"):
+            lda_assoc_correlations.append((rho[0], rho[1], stype))
+        else:
+            print("correlation between norms and %s: (%.2f, %.2f)" % (stype, rho[0], rho[1]))
+    lda_assoc_correlations.sort(key=lambda tup: tup[0], reverse=True)
+    rho = lda_assoc_correlations
+    for index in range(4):
+        print("correlation between norms and lda %s: (%.2f, %.2f)" % (rho[index][2], rho[index][0], rho[index][1]))
+        #`evallist.append(rho[index][2])
+    best_lda_name = rho[0][2]
+    norm2doc_path = args.wikiwords.split("_")[0] + ".norm2doc"
+    corpus_path =  args.wikiwords.split("_")[0]
+    best_lda_scores = process.read_lda(args.ldapath + "/" +best_lda_name, norm2doc_path, corpus_path, norms_fsg, common_words)
+    evallist.append((best_lda, best_lda_scores))
+
+
+    # Median rank of associates
+    # Sort the norm associates
+    print("Median Rank")
+    gold_associates = evaluate.sort_scores(norms_fsg)
+    for stype, scores in evallist:
+        # Sort the word2vec asscociates
+        scores_sorted = evaluate.sort_scores(scores)
+        print(stype)
+        ranks = evaluate.median_rank(gold_associates, scores_sorted, common_words, 3)
+        for rank in ranks:
+            print("median rank associate %d: %.2f" % (rank+1, np.median(ranks[rank])))
+        print
+        count = 0
+        for cue in scores_sorted:
+            print(stype, cue, scores_sorted[cue][:2], gold_associates[cue][:2])
+            if count > 4: break
+            count += 1
+
 
 
     print("Asymmetries")
     for b in asyms:
+        if b == "difference": continue
         lda_asym_correlations = []
         for stype in asyms[b]:
             rho = evaluate.rank_correlation(asyms[b]["norms"], asyms[b][stype])
@@ -117,14 +180,19 @@ if __name__ == "__main__":
             else:
                 print("correlation between norms and %s (%s of asymmetries): (%.2f, %.2f)" % (stype, b, rho[0], rho[1]))
         lda_asym_correlations.sort(key=lambda tup: tup[0], reverse=True)
-        rho = lda_asym_correlations[0]
-        print("correlation between norms and lda %s (%s of asymmetries): (%.2f, %.2f)" % (rho[2], b, rho[0], rho[1]))
-        print(lda_asym_correlations[:5])
-        print()
+        rho = lda_asym_correlations
+        for index in range(len(rho)):
+            if rho[index][2] == best_lda_name:
+                print("correlation between norms and lda %s (%s of asymmetries): (%.2f, %.2f)" % (rho[index][2], b, rho[index][0], rho[index][1]))
+
+        #print(lda_asym_correlations[:5])
+        #print()
+
     lda_asym_correlations = None
 
     print("Triangle Inequality")
     for b in te:
+        if b == "difference": continue
         lda_te_correlations = []
         for stype in te[b]:
             rho = evaluate.rank_correlation(te[b]["norms"], te[b][stype])
@@ -135,8 +203,8 @@ if __name__ == "__main__":
         lda_te_correlations.sort(key=lambda tup: tup[0], reverse=True)
         rho = lda_te_correlations[0]
         print("correlation between norms and lda %s (%s of traingle inequality): (%.2f, %.2f)" % (rho[2], b, rho[0], rho[1]))
-        print(lda_te_correlations[:5])
-        print()
+        #print(lda_te_correlations[:5])
+        #print()
         #if stype == "difference": continue
             #for index in range(len(tuples)):
             #    if te[b]["norms"][index] > 30 and \
@@ -144,40 +212,6 @@ if __name__ == "__main__":
             #                print(tuples[index], te[b]["norms"][index], te[b][stype][index])
 
     lda_te_correlations = None
-
-    print("Associations")
-    print("Overal correlations among associations")
-    #
-    lda_assoc_correlations = []
-    for stype in assocs:
-        rho = evaluate.rank_correlation(assocs["norms"], assocs[stype])
-        if stype.startswith("topics"):
-            lda_assoc_correlations.append((rho[0], rho[1], stype))
-        else:
-            print("correlation between norms and %s: (%.2f, %.2f)" % (stype, rho[0], rho[1]))
-    lda_assoc_correlations.sort(key=lambda tup: tup[0], reverse=True)
-    rho = lda_assoc_correlations[0]
-    print("correlation between norms and lda %s: (%.2f, %.2f)" % (rho[2], rho[0], rho[1]))
-    print(lda_assoc_correlations[:5])
-    print()
-
-    # Median rank of associates
-    # Sort the norm associates
-    print("Median Rank")
-    gold_associates = evaluate.sort_scores(norms_fsg)
-    for stype, scores in evallist:
-        # Sort the word2vec asscociates
-        scores_sorted = evaluate.sort_scores(scores)
-        print(stype)
-        ranks = evaluate.median_rank(gold_associates, scores_sorted, common_words, 5)
-        for rank in ranks:
-            print("median rank associate %d: %.2f" % (rank+1, np.median(ranks[rank])))
-        print
-        count = 0
-        for cue in scores_sorted:
-            print(stype, cue, scores_sorted[cue][:2], gold_associates[cue][:2])
-            if count > 4: break
-            count += 1
 
 
 
