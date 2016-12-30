@@ -1,6 +1,6 @@
 """
 Get the context of (Nelson) words from each document and store them.
-
+This code uses gensim to create documents.
 """
 import gensim
 import sys
