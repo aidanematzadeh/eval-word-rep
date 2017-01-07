@@ -31,7 +31,8 @@ def dirichlet_expectation(alpha):
         return(psi(alpha) - psi(n.sum(alpha)))
     return (psi(alpha) - psi(n.sum(alpha, 1))[:, n.newaxis])
 
-#change
+
+# change: Added this function
 def beta_expectation(a, c):
     """
     For a vector  x ~ Beta(a, b), computes E[log(x)] given a and b.
@@ -71,7 +72,6 @@ class OnlineLDA:
         self._D = D
         #
         self._alpha = alpha
-        #change
         # beta_kw ~ beta(eta, zeta)
         self._eta = eta
         self._zeta = zeta
@@ -81,37 +81,34 @@ class OnlineLDA:
         self._updatect = 0
 
         # Initialize the variational distribution q(beta|lambda)
-        #change
-        #self._lambda = n.zeros((self._K, self._W)) + 0.0001 #
-        self._lambda = 1*n.random.gamma(100., 1./100., (self._K, self._W))
-        #TODO n.random.beta(eta, zeta
-        #1*n.random.gamma(100., 1./100., (self._K, self._W))
-        #self._mu =  n.ones((self._K, self._W))#
-        self._mu = 1*n.random.gamma(100., 1./100., (self._K, self._W))
+        self._lambda = 1 * n.random.gamma(100., 1./100., (self._K, self._W))
+        self._mu = 1 * n.random.gamma(100., 1./100., (self._K, self._W))
 
-        print("lambda", self._lambda[0])
-        print("mu", self._mu[0])
-
-        #
-        #self._Elogbeta = dirichlet_expectation(self._lambda)
-        #change
-        self._posElogbeta = beta_expectation(self._lambda, self._lambda + self._mu) # K X W
+        # self._Elogbeta = dirichlet_expectation(self._lambda)
+        # changed:
+        self._posElogbeta = beta_expectation(self._lambda,
+                                             self._lambda + self._mu)  # K X W
         self._posExpElogbeta = n.exp(self._posElogbeta)
-        #
-        self._negElogbeta = beta_expectation(self._mu, self._lambda + self._mu) # K X W
+
+        self._negElogbeta = beta_expectation(self._mu,
+                                             self._lambda + self._mu)  # K X W
         self._negExpElogbeta = n.exp(self._negElogbeta)
-        #
+
+        # changed: added this as a global parameter
+        self._gamma = 1 * n.random.gamma(100., 1./100., (self._W, self._K))
+
         print("E[log beta]", self._posElogbeta[0][1:10])
         print("exp(E[log beta])", self._posExpElogbeta[0][1:10])
-
         print("E[log (1-beta)]", self._negElogbeta[0][1:10])
         print("exp E[log (1-beta)]", self._negExpElogbeta[0][1:10])
 
-    def do_e_step(self, pos_wordids, pos_wordcts, neg_wordids, neg_wordcts):
+    def do_e_step(self, pos_wordids, pos_wordcts, neg_wordids, neg_wordcts,
+                  begindex, endindex):
         batchD = len(pos_wordids)
+        # Initialize the variational dist. q(theta|gamma) for the mini-batch
+        # gamma = 1*n.random.gamma(100., 1./100., (batchD, self._K))
+        gamma = self._gamma[begindex: endindex]
 
-        # Initialize the variational distribution q(theta|gamma) for the mini-batch
-        gamma = 1*n.random.gamma(100., 1./100., (batchD, self._K))
         Elogtheta = dirichlet_expectation(gamma)
         expElogtheta = n.exp(Elogtheta)
 
@@ -124,13 +121,8 @@ class OnlineLDA:
             # These are mostly just shorthand (but might help cache locality)
             pos_ids = pos_wordids[d]
             pos_cts = pos_wordcts[d]
-            #
             neg_ids = neg_wordids[d]
             neg_cts = neg_wordcts[d]
-            #
-            #print("pos ids %d, neg ids %d" % (len(pos_ids), len(neg_ids)))
-            #print("pos cts %d, neg cts %d" % (sum(pos_cts), sum(neg_cts)))
-
             gammad = gamma[d, :]
             Elogthetad = Elogtheta[d, :]
             expElogthetad = expElogtheta[d, :]
@@ -154,45 +146,38 @@ class OnlineLDA:
                 # the update for gamma gives this update. Cf. Lee&Seung 2001.
                 # alpha + 1 X K * {(1 X W+) X (W+ X K) + }  --> 1 X K TODO
                 gammad = self._alpha + expElogthetad * \
-                        (n.dot(pos_cts / pos_phinorm, pos_expElogbetad.T) + \
-                        n.dot(neg_cts / neg_phinorm, neg_expElogbetad.T))
-                #TODO check gammad
-                #gammad = self._alpha + expElogthetad * n.dot(pos_cts / pos_phinorm, pos_expElogbetad.T)
-                #print("gammad", gammad[:, n.newaxis])
-                #
+                    (n.dot(pos_cts / pos_phinorm, pos_expElogbetad.T) +
+                     n.dot(neg_cts / neg_phinorm, neg_expElogbetad.T))
+                # gammad = self._alpha + expElogthetad *
+                # n.dot(pos_cts / pos_phinorm, pos_expElogbetad.T)
                 Elogthetad = dirichlet_expectation(gammad)
                 expElogthetad = n.exp(Elogthetad)
-                #
-                #change
+                # change
                 pos_phinorm = n.dot(expElogthetad, pos_expElogbetad) + 1e-100
                 neg_phinorm = n.dot(expElogthetad, neg_expElogbetad) + 1e-100
                 # If gamma hasn't changed much, we're done.
                 meanchange = n.mean(abs(gammad - lastgamma))
                 if (meanchange < meanchangethresh):
-                    print("converged %d" % d)
                     break
             gamma[d, :] = gammad
-            #
             # Contribution of document d to the expected sufficient
             # statistics for the M step.
             # change
-            pos_sstats[:, pos_ids] += n.outer(expElogthetad.T, pos_cts/pos_phinorm)
-            neg_sstats[:, neg_ids] += n.outer(expElogthetad.T, neg_cts/neg_phinorm)
-        #
+            pos_sstats[:, pos_ids] += n.outer(expElogthetad.T,
+                                              pos_cts/pos_phinorm)
+            neg_sstats[:, neg_ids] += n.outer(expElogthetad.T,
+                                              neg_cts/neg_phinorm)
+
         # This step finishes computing the sufficient statistics for the
         # M step, so that
         # sstats[k, w] = \sum_d n_{dw} * phi_{dwk}
         # = \sum_d n_{dw} * exp{Elogtheta_{dk} + Elogbeta_{kw}} / phinorm_{dw}.
         pos_sstats = pos_sstats * self._posExpElogbeta
         neg_sstats = neg_sstats * self._negExpElogbeta
-
-        #print("pos stats",  pos_sstats[:, pos_ids])
-        #print("neg stats",  neg_sstats[:, neg_ids])
-
         return (gamma, pos_sstats, neg_sstats)
 
-
-    def update_lambda(self, pos_wordids, pos_wordcts, neg_wordids, neg_wordcts):
+    def update_lambda(self, pos_wordids, pos_wordcts, neg_wordids, neg_wordcts,
+                      begindex, endindex):
         """
         First does an E step on the mini-batch given in wordids and
         wordcts, then uses the result of that E step to update the
@@ -220,29 +205,34 @@ class OnlineLDA:
         # Do an E step to update gamma, phi | lambda for this
         # mini-batch. This also returns the information about phi that
         # we need to update lambda.
-        (gamma, pos_sstats, neg_sstats) = self.do_e_step(pos_wordids, pos_wordcts, neg_wordids, neg_wordcts)
+        (gamma, pos_sstats, neg_sstats) = self.do_e_step(pos_wordids,
+                                                         pos_wordcts,
+                                                         neg_wordids,
+                                                         neg_wordcts,
+                                                         begindex,
+                                                         endindex)
         # Estimate held-out likelihood for current values of lambda.
-        #change
-        bound = self.approx_bound(pos_wordids, pos_wordcts, neg_wordids, neg_wordcts, gamma)
+        bound = self.approx_bound(pos_wordids, pos_wordcts,
+                                  neg_wordids, neg_wordcts, gamma)
         # Update lambda based on documents.
-        # change
-        self._lambda = self._lambda * (1-rhot) + rhot * (self._eta + self._D * pos_sstats / len(pos_wordids))
-        #
-        print("updated lambda",self._lambda[0][1:10])
-        self._mu =  self._mu  * (1-rhot) + rhot * (self._zeta + self._D * neg_sstats / len(neg_wordids))
-        print("updated mu",self._mu[0][1:10])
-        #
-        self._posElogbeta = beta_expectation(self._lambda, self._lambda + self._mu)
-        self._posExpElogbeta = n.exp(self._posElogbeta)
-        #
-        self._negElogbeta = beta_expectation(self._mu, self._lambda + self._mu)
-        self._negExpElogbeta = n.exp(self._negElogbeta)
-        #
-        self._updatect += 1
+        self._lambda = self._lambda * (1 - rhot) +\
+            rhot * (self._eta + self._D * pos_sstats / len(pos_wordids))
+        self._mu = self._mu * (1 - rhot) +\
+            rhot * (self._zeta + self._D * neg_sstats / len(neg_wordids))
 
+        self._posElogbeta = beta_expectation(self._lambda,
+                                             self._lambda + self._mu)
+        self._posExpElogbeta = n.exp(self._posElogbeta)
+
+        self._negElogbeta = beta_expectation(self._mu,
+                                             self._lambda + self._mu)
+        self._negExpElogbeta = n.exp(self._negElogbeta)
+
+        self._updatect += 1
         return(gamma, bound)
 
-    def approx_bound(self, pos_wordids, pos_wordcts, neg_wordids, neg_wordcts, gamma):
+    def approx_bound(self, pos_wordids, pos_wordcts,
+                     neg_wordids, neg_wordcts, gamma):
         """
         Estimates the variational bound over *all documents* using only
         the documents passed in as "docs." gamma is the set of parameters
@@ -259,11 +249,9 @@ class OnlineLDA:
 
         score = 0
         Elogtheta = dirichlet_expectation(gamma)
-        #expElogtheta = n.exp(Elogtheta)
 
         # E[log p(docs | theta, beta)]
         for d in range(0, batchD):
-            #gammad = gamma[d, :]
             # Positive words
             pos_ids = pos_wordids[d]
             pos_cts = n.array(pos_wordcts[d])
@@ -302,8 +290,4 @@ class OnlineLDA:
         score = score + n.sum(gammaln(self._eta + self._zeta) -
                               gammaln(self._lambda + self._mu))
 
-
-        #score = score + n.sum(gammaln(self._eta * self._W) -gammaln(n.sum(self._lambda, 1)))
-
         return(score)
-

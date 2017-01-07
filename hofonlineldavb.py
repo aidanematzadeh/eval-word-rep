@@ -19,9 +19,9 @@
 import numpy as n
 from scipy.special import gammaln, psi
 
-
 n.random.seed(100000001)
 meanchangethresh = 0.001
+
 
 def dirichlet_expectation(alpha):
     """
@@ -62,18 +62,18 @@ class OnlineLDA:
         self._D = D
         self._alpha = alpha
         self._eta = eta
+
         self._tau0 = tau0 + 1
         self._kappa = kappa
         self._updatect = 0
 
         # Initialize the variational distribution q(beta|lambda)
-        self._lambda = 1*n.random.gamma(100., 1./100., (self._K, self._W))
+        self._lambda = 1 * n.random.gamma(100., 1./100., (self._K, self._W))
         self._Elogbeta = dirichlet_expectation(self._lambda)
         self._expElogbeta = n.exp(self._Elogbeta)
 
         # TODO Added this as a global parameter
         self._gamma = 1 * n.random.gamma(100., 1./100., (self._W, self._K))
-
 
     def do_e_step(self, wordids, wordcts, begindex, endindex):
         batchD = len(wordids)
@@ -127,7 +127,6 @@ class OnlineLDA:
         sstats = sstats * self._expElogbeta
 
         return((gamma, sstats))
-
 
     def update_lambda(self, wordids, wordcts, begindex, endindex):
         """
@@ -186,11 +185,9 @@ class OnlineLDA:
 
         score = 0
         Elogtheta = dirichlet_expectation(gamma)
-     #   expElogtheta = n.exp(Elogtheta)
 
         # E[log p(docs | theta, beta)]
         for d in range(0, batchD):
-     #       gammad = gamma[d, :]
             ids = wordids[d]
             cts = n.array(wordcts[d])
             phinorm = n.zeros(len(ids))
@@ -220,5 +217,3 @@ class OnlineLDA:
                               gammaln(n.sum(self._lambda, 1)))
 
         return(score)
-
-

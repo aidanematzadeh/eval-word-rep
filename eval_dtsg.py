@@ -9,6 +9,16 @@ import argparse
 import process
 import evaluate
 
+# python3.5 eval_dtsg.py test_results/dec30pos/norms.pickle data/nelson_norms/
+# test_results/dec30pos/cbowcos.pickle test_results/dec30pos/cbowcond.pickle
+# data/GoogleNews-vectors-negative300.bin test_results/dec30pos/sgcos.pickle
+# test_results/dec30pos/sgcond.pickle
+# test_results/stephan/size-200_window-5_mc-0_workers-12_sg-0_neg-0_hs-1
+# test_results/dec30pos/lda.pickle data/wikipedia_sw_norms_100k/5w_word2id
+# test_results/dec30pos/gamma4916 test_results/dec30pos/lambda100154 none
+# test_results/dec30pos/allpairs_sg.pickle test_results/dec30pos/
+
+
 if __name__ == "__main__":
 
     argparser = argparse.ArgumentParser()
@@ -18,6 +28,10 @@ if __name__ == "__main__":
     argparser.add_argument("cbowcos_pickle", type=str, help="Input cbow cosnie score pickle file.")
     argparser.add_argument("cbowcond_pickle", type=str, help="Input cbow cond prob pickle file.")
     argparser.add_argument("cbow_binarypath", type=str, default=None, help="Input cbow Google binary path.")
+    #
+    argparser.add_argument("sgcos_pickle", type=str, help="Input skigpram cosnie score pickle file.")
+    argparser.add_argument("sgcond_pickle", type=str, help="Input skipgram cond prob pickle file.")
+    argparser.add_argument("sg_path", type=str, default=None, help="Input skipgram model.")
     #
     argparser.add_argument("lda_pickle", type=str, help="Input lda cond prob pickle file.")
     argparser.add_argument("ldavocab_path", type=str, help="Input the LDA word2id filename")
@@ -31,25 +45,39 @@ if __name__ == "__main__":
     if args.ldamu_path == "none": #TODO
         args.ldamu_path = None
 
-
     norms = process.get_norms(args.norms_pickle, args.norms_dirpath)
+    cbow_cos, cbow_cond = process.get_w2v(args.cbowcos_pickle,
+                                          args.cbowcond_pickle, norms,
+                                          args.cbow_binarypath, True)
 
-    cbow_cos, cbow_cond = process.get_cbow(args.cbowcos_pickle, args.cbowcond_pickle, norms, args.cbow_binarypath)
-    lda = process.get_lda(args.lda_pickle, norms, args.ldavocab_path, args.ldalambda_path, args.ldagamma_path, args.ldamu_path)
+    sg_cos, sg_cond = process.get_w2v(args.sgcos_pickle,
+                                      args.sgcond_pickle, norms,
+                                      args.sg_path, False)
+
+    lda = process.get_lda(args.lda_pickle, norms, args.ldavocab_path,
+                          args.ldalambda_path, args.ldagamma_path,
+                          args.ldamu_path)
 
     # Find the common pairs among the different models
-    allpairs = process.get_allpairs(args.allpairs_pickle, norms, cbow_cos, lda)
+    allpairs = process.get_allpairs(args.allpairs_pickle, norms, cbow_cos,
+                                    sg_cos, lda)
     asympairs = process.get_asym_pairs(norms, allpairs)
-    print("all common pairs: %d, asym pairs: %d" % (len(allpairs), len(asympairs)))
+    print("common pairs: %d, asym pairs: %d" % (len(allpairs), len(asympairs)))
 
-    commonwords = set(lda.keys()) & set(cbow_cos.keys()) & set(norms.keys())
-    print("all common cues", len(commonwords))
+    commonwords = set(lda.keys()) & set(cbow_cos.keys()) & \
+        set(sg_cos.keys()) & set(norms.keys())
+    print("common cues", len(commonwords))
 
     tuples = process.get_tuples(norms, allpairs)
     print("Number of TE tuples", len(tuples))
 
     # List of models to run the evaluation tasks on
-    evallist = [("norms", norms), ("cbow-cond", cbow_cond), ("cbow-cos", cbow_cos), ("lda", lda)]
+    evallist = [("norms", norms),
+                ("bin-cbow-cond", cbow_cond),
+                ("bin-cbow-cos", cbow_cos),
+                ("sg-cond", sg_cond),
+                ("sg-cos", sg_cos),
+                ("lda", lda)]
 
 
     print("Asymmetries")

@@ -5,120 +5,128 @@ import scipy.io as sio
 import scipy
 import pickle
 import os.path
-
 # Reads and process data used in the evaluation.
+from smart_open import smart_open
 
 def load_scores(path):
-    """loads a pickle file.
+    """ Loads a pickle file.
     """
     with open(path, 'rb') as f:
         scores = pickle.load(f)
     return scores
 
 
-def get_norms(picklefilename, norms_path=None):
+def get_norms(norms_pickle, norms_path=None):
     """ Read Nelson norms for the evaluation methods.
-    If a pickle file exists, load and return the norms.
-    Otherwise, read the norms from the dir and write a pickle file to picklefilename.
+    If a pickle file exists, load and return the norms. Otherwise, read the
+    norms from the dir and write a pickle file to norms_pickle.
     Norms are formatted as: CUE, TARGET, NORMED?, #G, #P, FSG, BSG,
     """
-    if os.path.exists(picklefilename):
-        return load_scores(picklefilename)
+    if os.path.exists(norms_pickle):
+        return load_scores(norms_pickle)
 
     # The value of zero means that the norms[cue][target] does not exist.
     norms = {}
     for filename in os.listdir(norms_path):
-        norm_file = open(norms_path + "/" + filename, 'r', encoding = "ISO-8859-1")
-        norm_file.readline()
-        for line in norm_file:
+        normfile = open(norms_path + "/" + filename, 'r', encoding="ISO-8859-1")
+        normfile.readline()
+        for line in normfile:
             nodes = line.strip().split(',')
             cue = nodes[0].strip().lower()
             target = nodes[1].strip().lower()
+            if cue not in norms:
+                norms[cue] = {}
+            norms[cue][target] = float(nodes[5])  # FSG, p(target|cue)
 
-            if not cue in norms: norms[cue] = {}
-            # Check if the cue, target pair is normed that is p(cue|target) also exists
-            # The next line was used in NIPS submission. Commented in Oct 2016.
-            #if nodes[2].strip() == "YES":
-            norms[cue][target] = float(nodes[5]) #FSG, p(target|cue)
-    #
-    with open(picklefilename ,'wb') as output:
+    with open(norms_pickle, 'wb') as output:
         pickle.dump(norms, output)
-
     return norms
 
-def get_cbow(cbow_cos_path, cbow_cond_path, norms=None, cbow_binary=None):
-    """ Read Google CBOW (cbow) representations for words in norms and popluate
+
+def get_w2v(w2vcos_pickle, w2vcond_pickle,
+            norms=None, w2v_path=None, binary_flag=None):
+    """ Load (Gensim) Word2Vec representations for words in norms and popluate
     their similarities using cosine and p(w2|w1).
     Uses gensim to load the representations.
     """
-    if os.path.exists(cbow_cos_path):#.endswith("pickle"):
-        cbow_cos = load_scores(cbow_cos_path)
-        cbow_cond = load_scores(cbow_cond_path)
-        return cbow_cos, cbow_cond
+    if os.path.exists(w2vcos_pickle):
+        w2v_cos = load_scores(w2vcos_pickle)
+        w2v_cond = load_scores(w2vcond_pickle)
+        return w2v_cos, w2v_cond
 
-    model = gensim.models.Word2Vec.load_word2vec_format(cbow_binary, binary=True)
+    if binary_flag:  # Loading a pretrained binary file from Google
+        model = gensim.models.Word2Vec.load_word2vec_format(w2v_path,
+                                                            binary=True)
+    else:  # Loading a model trained by gensim
+        #with smart_open(w2v_path, 'rb') as f:
+            #u = pickle._Unpickler(f)
+            #u.encoding = 'latin1'
+            #p = u.load()
+            #print(p)
+        #    print(w2v_path)
+        #    model = pickle.load(f.read(), encoding='latin1')
+        #with open(w2v_path, 'wb') as output:
+        #    pickle.dump(model, output)
+        model = gensim.models.Word2Vec.load(w2v_path)
+
     print("Done loading the Gensim model.")
 
-    cbow_cos = {}
-    cbow_cond ={}
-    # list of all the norms that have a CBOW rep. Used in normalization of cond prob.
+    w2v_cos, w2v_cond = {}, {}
+    # List of all the norms in the model. Used in normalization of cond prob.
     wordlist = set([])
     # Note that the cosine is the same as dot product for cbow vectors
     for cue in norms:
-        if not cue in model: continue
-        if not cue in cbow_cos:
-            cbow_cos[cue] = {}
-            cbow_cond[cue] = {}
+        if cue not in model:
+            continue
+        if cue not in w2v_cos:
+            w2v_cos[cue], w2v_cond[cue] = {}, {}
         wordlist.add(cue)
-        for target in norms:#[cue]:
-            if not target in model: continue
-            wordlist.add(target)
-            if not target in cbow_cos:
-                cbow_cos[target] = {}
-                cbow_cond[target] = {}
-            #
-            if not target in cbow_cos[cue]:
-                cbow_cos[cue][target] = model.similarity(cue, target)
-                cbow_cos[target][cue] = cbow_cos[cue][target]
+        for target in norms:
+            if target not in model:
+                continue
+            if target not in w2v_cos:
+                w2v_cos[target], w2v_cond[target] = {}, {}
+            if target not in w2v_cos[cue]:
+                w2v_cos[cue][target] = model.similarity(cue, target)
+                w2v_cos[target][cue] = w2v_cos[cue][target]
 
     # Calculate p(target|cue) where cue is w1 and target is w2
     # log(p(w2|w1)) = log(exp(w2.w1)) - log(sum(exp(w',w1)))
-    for cue in cbow_cos.keys():
+    for cue in w2v_cos.keys():
         cue_context = []
         for w in wordlist:
             cue_context.append(model.similarity(cue, w))
         # Using words in the word_list to normalize the prob
         p_cue = scipy.misc.logsumexp(np.asarray(cue_context))
-        for target in cbow_cos[cue]:
-            cbow_cond[cue][target] = np.exp(cbow_cos[cue][target] - p_cue)
+        for target in w2v_cos[cue]:
+            w2v_cond[cue][target] = np.exp(w2v_cos[cue][target] - p_cue)
 
-    with open(cbow_cond_path , 'wb') as output:
-        pickle.dump(cbow_cond, output)
-    with open(cbow_cos_path, 'wb') as output:
-        pickle.dump(cbow_cos, output)
+    with open(w2vcond_pickle, 'wb') as output:
+        pickle.dump(w2v_cond, output)
+    with open(w2vcos_pickle, 'wb') as output:
+        pickle.dump(w2v_cos, output)
 
-    print("cosine size %d norms size %d cond size %d" % (len(cbow_cos), len(norms), len(cbow_cond)))
+    print("cosine size %d norms size %d cond size %d" %
+          (len(w2v_cos), len(norms), len(w2v_cond)))
 
-    return cbow_cos, cbow_cond
+    return w2v_cos, w2v_cond
 
-def get_lda(lda_path, norms=None, vocab_path=None, lambda_path=None, gamma_path=None, mu_path=None):
-    """ Get the cond prob for word representations learned using Hoffman-VBLDA-based code.
-        Calculate p(target|cue) = sum_topics{p(target|topic) p(topic|cue)}
-        p(topic|cue) = theta_cue[topic] because document is the cue
-        vocab_path: the word2id mappings
+
+def get_lda(lda_path, norms=None, vocab_path=None,
+            lambda_path=None, gamma_path=None, mu_path=None):
+    """ Get the cond prob for word representations learned by
+    Hoffman-VBLDA-based code.
+    Calculate p(target|cue) = sum_topics{p(target|topic) p(topic|cue)}
+    p(topic|cue) = theta_cue[topic] because document is the cue
+    vocab_path: the word2id mappings
     """
     if os.path.exists(lda_path):
         return load_scores(lda_path)
 
-    word2id ={}
-    #norm2id = {} #TODO
+    word2id = {}
     with open(vocab_path, 'r') as f:
         for line in f:
-            word2id[line.split()[0]] = int(line.split()[1]) #TODO index 2 --> 1
-
-
-            #word2id[line.split()[0]] = int(line.split()[2]) #TODO index 2 --> 1
-            #norm2id[line.split()[0]] = int(line.split()[1]) #TODO
+            word2id[line.split()[0]] = int(line.split()[1])
 
     # Getting the topic-word probs -- p(topic|cue)
     topics = np.loadtxt(lambda_path)
@@ -127,7 +135,7 @@ def get_lda(lda_path, norms=None, vocab_path=None, lambda_path=None, gamma_path=
     print("lambda", topics.shape)
 
     # Normalize the topic-word probs
-    if mu_path == None:
+    if mu_path is None:
         for k in range(num_topics):
             topics[k] = topics[k] / sum(topics[k])
     else:
@@ -142,60 +150,110 @@ def get_lda(lda_path, norms=None, vocab_path=None, lambda_path=None, gamma_path=
 
     condprob = {}
     for cue in norms:
-        if not (cue in word2id.keys()): continue
-        if not cue in condprob:
+        if cue not in word2id.keys():
+            continue
+        if cue not in condprob:
             condprob[cue] = {}
-        #
+
         # Topic distribution of the document associated with cue
-        cueid = word2id[cue] #TODO would this be true
-        #cueid = norm2id[cue] # Remove this #TODO
-        #
-        cue_topics_dist = gamma[cueid] / sum(gamma[cueid])  # normalize distribution
-        for target in norms:#[cue]: #TODO should we add the norms[cue] too?
-            if not (target in word2id.keys()): continue
-            if not (target in condprob[cue]):
+        cueid = word2id[cue]  # TODO would this be true
+        cue_topics_dist = gamma[cueid] / sum(gamma[cueid])  # Normalize gamma
+        # Calculate the cond prob for all the targets given the cue, and
+        # also all the possible cues
+        targetlist = list(set(norms[cue] + norms.keys()))
+        for target in targetlist:
+            if target not in word2id.keys():
+                continue
+            if target not in condprob[cue]:
                 condprob[cue][target] = 0
             targetid = word2id[target]
             for k in range(num_topics):
-                condprob[cue][target] +=  topics[k][targetid] * cue_topics_dist[k]
+                condprob[cue][target] += topics[k][targetid] *\
+                    cue_topics_dist[k]
 
     with open(lda_path, 'wb') as output:
         pickle.dump(condprob, output)
 
     return condprob
 
-def get_allpairs(allpairs_path, norms, cbow=None, lda=None):
+
+def get_allpairs(allpairs_pickle, norms, cbow=None, sg=None, lda=None):
     """ Get all cue-target pairs that occur in all of our evaluation sets, that is,
     Nelson norms, cbow, and LDA.
     """
-    if os.path.exists(allpairs_path):#.endswith("pickle"):
-        return load_scores(allpairs_path)
+    if os.path.exists(allpairs_pickle):
+        return load_scores(allpairs_pickle)
 
-    allpairs = []
-    normpairs = []
-
+    allpairs, normpairs = [], []
     for cue in norms:
         for target in norms[cue]:
             normpairs.append((cue, target))
-            if cbow != None and not (cue in cbow) or not (target in cbow[cue]):
-                continue
-            if lda != None and not (cue in lda) or not (target in lda[cue]):
+            if (cbow is not None) and\
+                    ((cue not in cbow) or (target not in cbow[cue])):
                 continue
 
+            if (sg is not None) and\
+                    ((cue not in sg) or (target not in sg[cue])):
+                continue
+
+            if (lda is not None) and\
+                    ((cue not in lda) or (target not in lda[cue])):
+                continue
             allpairs.append((cue, target))
 
     print("cues and targets in norms %d" % len(normpairs))
     print("cues and targets in norms and other data %d" % len(allpairs))
 
-    #if not filter_path == None:
-    #    self.assoc_list = self.read_filter_words(filter_path)
-    #    print("assoc list from Griffiths et al", len(self.assoc_list))
-    with open(allpairs_path, 'wb') as output:
+    with open(allpairs_pickle, 'wb') as output:
         pickle.dump(allpairs, output)
     return allpairs
 
 
-#TODO need to rewrite
+def get_pair_scores(scores, allpairs):
+    """ Return the cue-target scores
+    """
+    pair_scores = []
+    for cue, target in allpairs:
+        pair_scores.append(scores[cue][target])
+    return pair_scores
+
+
+def get_asym_pairs(norms, allpairs):
+    """ Return the pairs for which both p(target|cue) and P(cue|target) exist.
+    """
+    assym_pairs = set()
+    for cue, target in allpairs:
+        if not (cue in norms and target in norms[cue]):
+            continue
+        if not (target in norms and cue in norms[target]):
+            continue
+        assym_pairs.add((min(cue, target), max(cue, target)))
+    return list(assym_pairs)
+
+
+def get_tuples(norms, allpairs):
+    """ Find all the three words for which P(w2|w1), P(w3|w2),
+    and P(w3|w1) exist.
+    This is equivalent to the subset of the combination of 3-length ordered
+    tuples that their pairs exist in Nelson norms.
+    """
+    # TODO make faster
+    tuples = []
+    for w1 in norms:
+        for w2 in norms[w1]:
+            if w2 not in norms:
+                continue
+            if (w1, w2) not in allpairs:
+                continue
+            for w3 in norms[w2]:
+                if (w2, w3) not in allpairs:
+                    continue
+                if (w1, w3) in allpairs:
+                    tuples.append((w1, w2, w3))
+    return tuples
+
+
+# TODO need to rewrite
 def read_gensimlda(ldapath, norm2doc_path, corpus_path, norms, word_list):
     """ Calculate p(target|cue) = sum_topics{p(target|topic) p(topic|cue)}
         p(topic|cue) = theta_cue[topic] because document is the cue
@@ -210,7 +268,7 @@ def read_gensimlda(ldapath, norm2doc_path, corpus_path, norms, word_list):
         with open('/tmp/badfile', 'a') as f:
             f.write(ldapath + '\n')
             return None
-    word2id =  {}
+    word2id ={}
     for wordid, word in lda.id2word.items():
         word2id[word] = wordid
 
@@ -220,25 +278,19 @@ def read_gensimlda(ldapath, norm2doc_path, corpus_path, norms, word_list):
     for k in range(lda.num_topics):
         topics[k] = topics[k]/topics[k].sum()
 
-    #norm_id --> (doc_id, norm_freq)
+    # norm_id --> (doc_id, norm_freq)
     norm2doc = load_scores(norm2doc_path)
     corpus = gensim.corpora.MmCorpus(corpus_path)
-
-    #wordprob = np.zeros(lda.num_terms)
-    #for i in range(lda.num_terms):
-    #    wordprob[i] = np.sum(topics[:,i]) # this should be multiplied with the topic prob
 
     condprob = {}
     for cue in norms:
         if not (cue in word_list): continue
         if not cue in condprob:
             condprob[cue] = []
-        #cueid = word2id[cue]
         # Topic distribution of the document associated with cue
         doc_id = norm2doc[cue.encode()][0]
         gamma, _ = lda.inference([corpus[doc_id]])
         doc_topics_dist = gamma[0] / sum(gamma[0])  # normalize distribution
-        #doc_topics = lda.get_document_topics(corpus[doc_id], minimum_probability=0)
 
         for target in norms[cue]:
             if not (target in word_list): continue
@@ -252,42 +304,6 @@ def read_gensimlda(ldapath, norm2doc_path, corpus_path, norms, word_list):
 
     return condprob
 
-def get_pair_scores(scores, allpairs):
-    """ Return the cue-target scores
-    """
-    pair_scores = []
-    for cue, target in allpairs:
-        pair_scores.append(scores[cue][target])
-    return pair_scores
-
-def get_asym_pairs(norms, allpairs):
-    """ Return the pairs for which both p(target|cue) and P(cue|target) exist.
-    """
-    assym_pairs = set()
-    for cue, target in allpairs:
-        if not(cue in norms and target in norms[cue]): continue
-        if not(target in norms and cue in norms[target]): continue
-        #
-        #if norms[cue][target] !=0 and norms[target][cue] !=0:
-        assym_pairs.add((min(cue,target), max(cue,target)))
-    return list(assym_pairs)
-
-def get_tuples(norms, allpairs):
-    """ Find all the three words for which P(w2|w1), P(w3|w2), and P(w3|w1) exist
-    This is equivalent to the subset of the combination of 3-length ordered tuples
-    that their pairs exist in Nelson norms.
-    """
-    #TODO make faster
-    tuples = []
-    for w1 in norms:
-        for w2 in norms[w1]:
-            if not (w1, w2) in allpairs: continue
-            if not w2 in norms: continue
-            for w3 in norms[w2]:
-                if not (w2, w3) in allpairs: continue
-                if (w1, w3) in allpairs:
-                    tuples.append((w1, w2, w3))
-    return tuples
 
 
 def read_filter_words(filename):
