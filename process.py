@@ -81,7 +81,10 @@ def get_w2v(w2vcos_pickle, w2vcond_pickle,
         if cue not in w2v_cos:
             w2v_cos[cue], w2v_cond[cue] = {}, {}
         wordlist.add(cue)
-        for target in norms:
+
+        targetlist = list(set(list(norms[cue].keys()) + list(norms.keys())))
+
+        for target in targetlist:#norms:
             if target not in model:
                 continue
             if target not in w2v_cos:
@@ -160,7 +163,7 @@ def get_lda(lda_path, norms=None, vocab_path=None,
         cue_topics_dist = gamma[cueid] / sum(gamma[cueid])  # Normalize gamma
         # Calculate the cond prob for all the targets given the cue, and
         # also all the possible cues
-        targetlist = list(set(norms[cue] + norms.keys()))
+        targetlist = list(set(list(norms[cue].keys()) + list(norms.keys())))
         for target in targetlist:
             if target not in word2id.keys():
                 continue
