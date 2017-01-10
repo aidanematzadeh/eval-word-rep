@@ -4,9 +4,11 @@ python3 eval_dtsg.py
 --cbowcos_pickle test_results/dec14pos/cbowcos.pickle
 --cbowcond_pickle test_results/dec14pos/cbowcond.pickle
 --cbow_binarypath GoogleNews-vectors-negative300.bin
+--cbowcond_eq eq4
 --sgcos_pickle test_results/dec14pos/sgcos.pickle
 --sgcond_pickle test_results/dec14pos/sgcond.pickle
 --sg_path w2v/size-400_window-5_mc-0_workers-12_sg-0_neg-15_hs-0
+--sgcond_eq eq4
 --lda_pickle test_results/dec14pos/lda.pickle
 --ldavocab_path data/wikipedia_sw_norms_100k/5w_word2id
 --ldagamma_path dec14_pos/gamma4916
@@ -14,7 +16,7 @@ python3 eval_dtsg.py
 --ldamu_path none
 --glovecos_pickle test_results/dec14pos/glovecos.pickle
 --glovecond_pickle test_results/dec14pos/glovecond.pickle
---glove_path GloVe/wiki_pretrained.txt
+--glove_path GloVe/wiki_300_local_train.txt
 --allpairs_pickle test_results/dec14pos/allpairs_sg.pickle
 --outdir test_results/dec14pos/
 #tr '\n' ' ' < eval_dtsg.sh > eval_dtsg_run.sh && chmod +x eval_dtsg_run.sh && ./eval_dtsg_run.sh
