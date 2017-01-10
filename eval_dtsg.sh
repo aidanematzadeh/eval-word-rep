@@ -12,6 +12,9 @@ python3 eval_dtsg.py
 --ldagamma_path dec14_pos/gamma4916
 --ldalambda_path dec14_pos/lambda100154
 --ldamu_path none
+--glovecos_pickle test_results/dec14pos/glovecos.pickle
+--glovecond_pickle test_results/dec14pos/glovecond.pickle
+--glove_path GloVe/wiki_pretrained.txt
 --allpairs_pickle test_results/dec14pos/allpairs_sg.pickle
 --outdir test_results/dec14pos/
 #tr '\n' ' ' < eval_dtsg.sh > eval_dtsg_run.sh && chmod +x eval_dtsg_run.sh && ./eval_dtsg_run.sh

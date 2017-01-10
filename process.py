@@ -6,16 +6,26 @@ import scipy
 import pickle
 import os.path
 import codecs
+import pandas
+import csv
 # Reads and process data used in the evaluation.
 from smart_open import smart_open
 
 class Glove_model(object):
     def __init__(self, glove_path):
-        self.activation = pandas.read_table(glove_path,sep = ' ', index_col=0, encoding='utf-8', quoting=csv.QUOTE_NONE)
+        self.df = pandas.read_table(glove_path,sep = ' ', index_col=0, encoding='utf-8', quoting=csv.QUOTE_NONE)
+        
+        #make this into a faster to access object
+        self.activation = {}        
+        for index, row in self.df.iterrows():
+            self.activation[index] = row
+
+        self.idx = 0 
+        self.vocab = set(self.df.index.tolist())    
     
     def similarity(self,word1, word2):
-        vector1 = self.activation.loc[word1]
-        vector2 = self.activation.loc[word2]    
+        vector1 = self.activation[word1]
+        vector2 = self.activation[word2]    
         sim = 1 - scipy.spatial.distance.cosine(vector1,vector2)    
         return(sim)
 
@@ -376,8 +386,12 @@ def get_glove(glovecos_pickle, glovecond_pickle, glove_path,
     # List of all the norms in the model. Used in normalization of cond prob.
     wordlist = set([])
     # Note that the cosine is the same as dot product for cbow vectors
+    print('Getting cosine similarity')
+    #import pdb
+    #pdb.set_trace()
     for cue in norms:
-        if cue not in model:
+        print('Getting cosine similarity: '+cue)
+        if cue not in model.vocab:
             continue
         if cue not in glove_cos:
             glove_cos[cue], glove_cond[cue] = {}, {}
@@ -386,7 +400,8 @@ def get_glove(glovecos_pickle, glovecond_pickle, glove_path,
         targetlist = list(set(list(norms[cue].keys()) + list(norms.keys())))
 
         for target in targetlist:#norms:
-            if target not in model:
+            #print('Checking target: '+target)
+            if target not in model.vocab:
                 continue
             if target not in glove_cos:
                 glove_cos[target], glove_cond[target] = {}, {}
@@ -396,7 +411,9 @@ def get_glove(glovecos_pickle, glovecond_pickle, glove_path,
 
     # Calculate p(target|cue) where cue is w1 and target is w2
     # log(p(w2|w1)) = log(exp(w2.w1)) - log(sum(exp(w',w1)))
+    print('Getting conditional similarity')
     for cue in glove_cos.keys():
+        print('Getting conditional similarity: '+cue)
         cue_context = []
         for w in wordlist:
             cue_context.append(model.similarity(cue, w))

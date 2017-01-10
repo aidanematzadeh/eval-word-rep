@@ -50,17 +50,13 @@ if __name__ == "__main__":
         args.ldamu_path = None
 
     norms = process.get_norms(args.norms_pickle, args.norms_dirpath)
-    # cbow_cos, cbow_cond = process.get_w2v(args.cbowcos_pickle,
-    #                                       args.cbowcond_pickle, norms,
-    #                                       args.cbow_binarypath, True)
+    cbow_cos, cbow_cond = process.get_w2v(args.cbowcos_pickle, args.cbowcond_pickle, norms, args.cbow_binarypath, True)
 
-    # sg_cos, sg_cond = process.get_w2v(args.sgcos_pickle,
-    #                                   args.sgcond_pickle, norms,
-    #                                   args.sg_path, False)
+    sg_cos, sg_cond = process.get_w2v(args.sgcos_pickle,args.sgcond_pickle, norms, args.sg_path, False)
 
-    # lda = process.get_lda(args.lda_pickle, norms, args.ldavocab_path,
-    #                       args.ldalambda_path, args.ldagamma_path,
-    #                       args.ldamu_path)
+    lda = process.get_lda(args.lda_pickle, norms, args.ldavocab_path,
+                          args.ldalambda_path, args.ldagamma_path,
+                          args.ldamu_path)
 
     glove_cos, glove_cond =  process.get_glove(args.glovecos_pickle, args.glovecond_pickle, args.glove_path, norms)
 
