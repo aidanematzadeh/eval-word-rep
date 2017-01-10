@@ -5,14 +5,35 @@ import scipy.io as sio
 import scipy
 import pickle
 import os.path
+import codecs
+import pandas
+import csv
 # Reads and process data used in the evaluation.
 from smart_open import smart_open
+
+class Glove_model(object):
+    def __init__(self, glove_path):
+        self.df = pandas.read_table(glove_path,sep = ' ', index_col=0, encoding='utf-8', quoting=csv.QUOTE_NONE)
+        
+        #make this into a faster to access object
+        self.activation = {}        
+        for index, row in self.df.iterrows():
+            self.activation[index] = row
+
+        self.idx = 0 
+        self.vocab = set(self.df.index.tolist())    
+    
+    def similarity(self,word1, word2):
+        vector1 = self.activation[word1]
+        vector2 = self.activation[word2]    
+        sim = 1 - scipy.spatial.distance.cosine(vector1,vector2)    
+        return(sim)
 
 def load_scores(path):
     """ Loads a pickle file.
     """
     with open(path, 'rb') as f:
-        scores = pickle.load(f)
+        scores = pickle.load(f, encoding='latin1')
     return scores
 
 
@@ -28,7 +49,7 @@ def get_norms(norms_pickle, norms_path=None):
     # The value of zero means that the norms[cue][target] does not exist.
     norms = {}
     for filename in os.listdir(norms_path):
-        normfile = open(norms_path + "/" + filename, 'r', encoding="ISO-8859-1")
+        normfile = codecs.open(norms_path + "/" + filename, 'r', encoding="ISO-8859-1")
         normfile.readline()
         for line in normfile:
             nodes = line.strip().split(',')
@@ -180,7 +201,7 @@ def get_lda(lda_path, norms=None, vocab_path=None,
     return condprob
 
 
-def get_allpairs(allpairs_pickle, norms, cbow=None, sg=None, lda=None):
+def get_allpairs(allpairs_pickle, norms, cbow=None, sg=None, lda=None, glove=None):
     """ Get all cue-target pairs that occur in all of our evaluation sets, that is,
     Nelson norms, cbow, and LDA.
     """
@@ -202,6 +223,11 @@ def get_allpairs(allpairs_pickle, norms, cbow=None, sg=None, lda=None):
             if (lda is not None) and\
                     ((cue not in lda) or (target not in lda[cue])):
                 continue
+
+            if (glove is not None) and\
+                    ((cue not in glove) or (target not in glove[cue])):
+                continue    
+
             allpairs.append((cue, target))
 
     print("cues and targets in norms %d" % len(normpairs))
@@ -341,7 +367,70 @@ def mm2dt(mmcorpus_path, vocab_path):
     #
     return dt, vocab
 
+def get_glove(glovecos_pickle, glovecond_pickle, glove_path,
+            norms=None):
+    """ Load (Gensim) Word2Vec representations for words in norms and popluate
+    their similarities using cosine and p(w2|w1).
+    Uses gensim to load the representations.
+    """
+    if os.path.exists(glovecos_pickle) and os.path.exists(glovecond_pickle):
+        glove_cos = load_scores(glovecos_pickle)
+        glove_cond = load_scores(glovecond_pickle)
+        return glove_cos, glove_cond
 
+    model =  Glove_model(glove_path)    
+
+    print("Done loading the GloVe model.")
+
+    glove_cos, glove_cond = {}, {}
+    # List of all the norms in the model. Used in normalization of cond prob.
+    wordlist = set([])
+    # Note that the cosine is the same as dot product for cbow vectors
+    print('Getting cosine similarity')
+    #import pdb
+    #pdb.set_trace()
+    for cue in norms:
+        print('Getting cosine similarity: '+cue)
+        if cue not in model.vocab:
+            continue
+        if cue not in glove_cos:
+            glove_cos[cue], glove_cond[cue] = {}, {}
+        wordlist.add(cue)
+
+        targetlist = list(set(list(norms[cue].keys()) + list(norms.keys())))
+
+        for target in targetlist:#norms:
+            #print('Checking target: '+target)
+            if target not in model.vocab:
+                continue
+            if target not in glove_cos:
+                glove_cos[target], glove_cond[target] = {}, {}
+            if target not in glove_cos[cue]:
+                glove_cos[cue][target] = model.similarity(cue, target)
+                glove_cos[target][cue] = glove_cos[cue][target]
+
+    # Calculate p(target|cue) where cue is w1 and target is w2
+    # log(p(w2|w1)) = log(exp(w2.w1)) - log(sum(exp(w',w1)))
+    print('Getting conditional similarity')
+    for cue in glove_cos.keys():
+        print('Getting conditional similarity: '+cue)
+        cue_context = []
+        for w in wordlist:
+            cue_context.append(model.similarity(cue, w))
+        # Using words in the word_list to normalize the prob
+        p_cue = scipy.misc.logsumexp(np.asarray(cue_context))
+        for target in glove_cos[cue]:
+            glove_cond[cue][target] = np.exp(glove_cos[cue][target] - p_cue)
+
+    with open(glovecond_pickle, 'wb') as output:
+        pickle.dump(glove_cond, output)
+    with open(glovecos_pickle, 'wb') as output:
+        pickle.dump(glove_cos, output)
+
+    print("cosine size %d norms size %d cond size %d" %
+          (len(glove_cos), len(norms), len(glove_cond)))
+
+    return glove_cos, glove_cond
 
 
 

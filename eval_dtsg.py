@@ -22,50 +22,53 @@ import evaluate
 if __name__ == "__main__":
 
     argparser = argparse.ArgumentParser()
-    argparser.add_argument("norms_pickle", type=str, help="Input Neslon norms pickle file.")
-    argparser.add_argument("norms_dirpath", type=str, default=None, help="Input Neslon norms dir.")
+    argparser.add_argument("--norms_pickle", type=str, help="Input Neslon norms pickle file.")
+    argparser.add_argument("--norms_dirpath", type=str, default=None, help="Input Neslon norms dir.")
     #
-    argparser.add_argument("cbowcos_pickle", type=str, help="Input cbow cosnie score pickle file.")
-    argparser.add_argument("cbowcond_pickle", type=str, help="Input cbow cond prob pickle file.")
-    argparser.add_argument("cbow_binarypath", type=str, default=None, help="Input cbow Google binary path.")
+    argparser.add_argument("--cbowcos_pickle", type=str, help="Input cbow cosnie score pickle file.")
+    argparser.add_argument("--cbowcond_pickle", type=str, help="Input cbow cond prob pickle file.")
+    argparser.add_argument("--cbow_binarypath", type=str, default=None, help="Input cbow Google binary path.")
     #
-    argparser.add_argument("sgcos_pickle", type=str, help="Input skigpram cosnie score pickle file.")
-    argparser.add_argument("sgcond_pickle", type=str, help="Input skipgram cond prob pickle file.")
-    argparser.add_argument("sg_path", type=str, default=None, help="Input skipgram model.")
+    argparser.add_argument("--sgcos_pickle", type=str, help="Input skigpram cosnie score pickle file.")
+    argparser.add_argument("--sgcond_pickle", type=str, help="Input skipgram cond prob pickle file.")
+    argparser.add_argument("--sg_path", type=str, default=None, help="Input skipgram model.")
     #
-    argparser.add_argument("lda_pickle", type=str, help="Input lda cond prob pickle file.")
-    argparser.add_argument("ldavocab_path", type=str, help="Input the LDA word2id filename")
-    argparser.add_argument("ldagamma_path", type=str, help="Input the LDA gamma filename")
-    argparser.add_argument("ldalambda_path", type=str, help="Input the LDA lambda filename")
-    argparser.add_argument("ldamu_path", type=str, default=None, help="Input the LDA mu filename")
+    argparser.add_argument("--lda_pickle", type=str, help="Input lda cond prob pickle file.")
+    argparser.add_argument("--ldavocab_path", type=str, help="Input the LDA word2id filename")
+    argparser.add_argument("--ldagamma_path", type=str, help="Input the LDA gamma filename")
+    argparser.add_argument("--ldalambda_path", type=str, help="Input the LDA lambda filename")
+    argparser.add_argument("--ldamu_path", type=str, default=None, help="Input the LDA mu filename")
     #
-    argparser.add_argument("allpairs_pickle", type=str, help="all pairs output name or the pickle file")
-    argparser.add_argument("outdir", default='', help="Directory to place output files. (default='')")
+    argparser.add_argument("--glovecos_pickle", type=str, help="Input GloVe cosine score pickle file.")
+    argparser.add_argument("--glovecond_pickle", type=str, help="Input GloVe cond prob pickle file.")
+    argparser.add_argument("--glove_path", type=str, default=None, help="Input GloVe model.")
+    #
+    argparser.add_argument("--allpairs_pickle", type=str, help="all pairs output name or the pickle file")
+    argparser.add_argument("--outdir", default='', help="Directory to place output files. (default='')")
     args = argparser.parse_args()
     if args.ldamu_path == "none": #TODO
         args.ldamu_path = None
 
     norms = process.get_norms(args.norms_pickle, args.norms_dirpath)
-    cbow_cos, cbow_cond = process.get_w2v(args.cbowcos_pickle,
-                                          args.cbowcond_pickle, norms,
-                                          args.cbow_binarypath, True)
+    cbow_cos, cbow_cond = process.get_w2v(args.cbowcos_pickle, args.cbowcond_pickle, norms, args.cbow_binarypath, True)
 
-    sg_cos, sg_cond = process.get_w2v(args.sgcos_pickle,
-                                      args.sgcond_pickle, norms,
-                                      args.sg_path, False)
+    sg_cos, sg_cond = process.get_w2v(args.sgcos_pickle,args.sgcond_pickle, norms, args.sg_path, False)
 
     lda = process.get_lda(args.lda_pickle, norms, args.ldavocab_path,
                           args.ldalambda_path, args.ldagamma_path,
                           args.ldamu_path)
 
+    glove_cos, glove_cond =  process.get_glove(args.glovecos_pickle, args.glovecond_pickle, args.glove_path, norms)
+
+
     # Find the common pairs among the different models
     allpairs = process.get_allpairs(args.allpairs_pickle, norms, cbow_cos,
-                                    sg_cos, lda)
+                                    sg_cos, lda, glove_cos)
     asympairs = process.get_asym_pairs(norms, allpairs)
     print("common pairs: %d, asym pairs: %d" % (len(allpairs), len(asympairs)))
 
     commonwords = set(lda.keys()) & set(cbow_cos.keys()) & \
-        set(sg_cos.keys()) & set(norms.keys())
+        set(sg_cos.keys()) & set(glove_cos.keys()) & set(norms.keys())
     print("common cues", len(commonwords))
 
     tuples = process.get_tuples(norms, allpairs)
@@ -77,7 +80,9 @@ if __name__ == "__main__":
                 ("bin-cbow-cos", cbow_cos),
                 ("sg-cond", sg_cond),
                 ("sg-cos", sg_cos),
-                ("lda", lda)]
+                ("lda", lda),
+                ("glove-cos", glove_cos),
+                ("glove-cond", glove_cond)]
 
 
     print("Asymmetries")
@@ -164,12 +169,3 @@ if __name__ == "__main__":
             #    if te[b]["norms"][index] > 30 and \
             #            te[b][stype][index] < 1:
             #                print(tuples[index], te[b]["norms"][index], te[b][stype][index])
-
-
-
-
-
-
-
-
-
