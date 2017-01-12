@@ -21,12 +21,12 @@ class Glove_model(object):
             self.activation[index] = row
 
         self.idx = 0 
-        # self.vocab = set(self.df.index.tolist())    
+        self.vocab = set(self.df.index.tolist())    
     
     def similarity(self,word1, word2):
         vector1 = self.activation[word1]
-        vector2 = self.activation[word2]    
-        sim = 1 - scipy.spatial.distance.cosine(vector1,vector2)    
+        vector2 = self.activation[word2]            
+        sim = 1 - scipy.spatial.distance.cosine(vector1,vector2)            
         return(sim)
 
 def load_scores(path):
