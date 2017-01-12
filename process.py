@@ -25,8 +25,8 @@ class Glove_model(object):
     
     def similarity(self,word1, word2):
         vector1 = self.activation[word1]
-        vector2 = self.activation[word2]    
-        sim = 1 - scipy.spatial.distance.cosine(vector1,vector2)    
+        vector2 = self.activation[word2]            
+        sim = 1 - scipy.spatial.distance.cosine(vector1,vector2)            
         return(sim)
 
 def load_scores(path):
@@ -65,7 +65,7 @@ def get_norms(norms_pickle, norms_path=None):
 
 
 def get_w2v(w2vcos_pickle, w2vcond_pickle,
-            norms=None, w2v_path=None, binary_flag=None):
+            norms=None, w2v_path=None, binary_flag=None, cond_eq=None):
     """ Load (Gensim) Word2Vec representations for words in norms and popluate
     their similarities using cosine and p(w2|w1).
     Uses gensim to load the representations.
@@ -90,7 +90,15 @@ def get_w2v(w2vcos_pickle, w2vcond_pickle,
         #    pickle.dump(model, output)
         model = gensim.models.Word2Vec.load(w2v_path)
 
-    print("Done loading the Gensim model.")
+    print("Done loading the Gensim model.")    
+
+    def softmax(x):
+        return np.exp(x) / np.sum(np.exp(x), axis=0)
+    
+    model.column_normalized = np.apply_along_axis(softmax, axis=0, arr=model.syn0)
+
+    model.row_normalized= np.apply_along_axis(softmax, axis=1, arr=model.syn0)    
+
 
     w2v_cos, w2v_cond = {}, {}
     # List of all the norms in the model. Used in normalization of cond prob.
@@ -116,14 +124,42 @@ def get_w2v(w2vcos_pickle, w2vcond_pickle,
 
     # Calculate p(target|cue) where cue is w1 and target is w2
     # log(p(w2|w1)) = log(exp(w2.w1)) - log(sum(exp(w',w1)))
-    for cue in w2v_cos.keys():
-        cue_context = []
-        for w in wordlist:
-            cue_context.append(model.similarity(cue, w))
-        # Using words in the word_list to normalize the prob
-        p_cue = scipy.misc.logsumexp(np.asarray(cue_context))
-        for target in w2v_cos[cue]:
-            w2v_cond[cue][target] = np.exp(w2v_cos[cue][target] - p_cue)
+    if cond_eq == 'eq1':
+        for cue in w2v_cos.keys():
+            cue_context = []
+            for w in wordlist:
+                cue_context.append(model.similarity(cue, w))
+            # Using words in the word_list to normalize the prob
+            p_cue = scipy.misc.logsumexp(np.asarray(cue_context))        
+            for target in w2v_cos[cue]:            
+                w2v_cond[cue][target] = np.exp(w2v_cos[cue][target] - p_cue)
+
+    elif cond_eq == 'eq4':
+        word2id = dict(zip(model.vocab, range(len(model.vocab))))
+        id2word = dict(zip(word2id.values(), word2id.keys()))
+
+        num_topics = model.row_normalized.shape[1]
+        condprob = {}
+        for cue in norms:
+            if cue not in w2v_cos.keys():
+                continue
+            if cue not in condprob:
+                condprob[cue] = {}
+                
+            cue_topics_dist = model.row_normalized[word2id[cue],:]
+
+            # Calculate the cond prob for all the targets given the cue, and
+            # also all the possible cues
+            targetlist = list(set(list(norms[cue].keys()) + list(norms.keys())))
+            for target in targetlist:
+                if target not in word2id.keys():
+                    continue
+                if target not in condprob[cue]:
+                    condprob[cue][target] = 0
+                targetProbVector = model.column_normalized[word2id[target],:]
+                condprob[cue][target] = np.sum(cue_topics_dist * targetProbVector)
+
+
 
     with open(w2vcond_pickle, 'wb') as output:
         pickle.dump(w2v_cond, output)
@@ -387,8 +423,6 @@ def get_glove(glovecos_pickle, glovecond_pickle, glove_path,
     wordlist = set([])
     # Note that the cosine is the same as dot product for cbow vectors
     print('Getting cosine similarity')
-    #import pdb
-    #pdb.set_trace()
     for cue in norms:
         print('Getting cosine similarity: '+cue)
         if cue not in model.vocab:

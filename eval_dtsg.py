@@ -28,10 +28,12 @@ if __name__ == "__main__":
     argparser.add_argument("--cbowcos_pickle", type=str, help="Input cbow cosnie score pickle file.")
     argparser.add_argument("--cbowcond_pickle", type=str, help="Input cbow cond prob pickle file.")
     argparser.add_argument("--cbow_binarypath", type=str, default=None, help="Input cbow Google binary path.")
+    argparser.add_argument("--cbowcond_eq", type=str, default=None, help="Which equation should be used to compute the conditional probability?")
     #
     argparser.add_argument("--sgcos_pickle", type=str, help="Input skigpram cosnie score pickle file.")
     argparser.add_argument("--sgcond_pickle", type=str, help="Input skipgram cond prob pickle file.")
     argparser.add_argument("--sg_path", type=str, default=None, help="Input skipgram model.")
+    argparser.add_argument("--sgcond_eq", type=str, default=None, help="Which equation should be used to compute the conditional probability?")
     #
     argparser.add_argument("--lda_pickle", type=str, help="Input lda cond prob pickle file.")
     argparser.add_argument("--ldavocab_path", type=str, help="Input the LDA word2id filename")
@@ -50,9 +52,9 @@ if __name__ == "__main__":
         args.ldamu_path = None
 
     norms = process.get_norms(args.norms_pickle, args.norms_dirpath)
-    cbow_cos, cbow_cond = process.get_w2v(args.cbowcos_pickle, args.cbowcond_pickle, norms, args.cbow_binarypath, True)
+    cbow_cos, cbow_cond = process.get_w2v(args.cbowcos_pickle, args.cbowcond_pickle, norms, args.cbow_binarypath, True, args.cbowcond_eq)
 
-    sg_cos, sg_cond = process.get_w2v(args.sgcos_pickle,args.sgcond_pickle, norms, args.sg_path, False)
+    sg_cos, sg_cond = process.get_w2v(args.sgcos_pickle,args.sgcond_pickle, norms, args.sg_path, False, args.sgcond_eq)
 
     lda = process.get_lda(args.lda_pickle, norms, args.ldavocab_path,
                           args.ldalambda_path, args.ldagamma_path,
