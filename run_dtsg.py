@@ -2,13 +2,13 @@ import sys
 import numpy as n
 
 import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 import dtsg
 import hofonlineldavb as poslda
 import process
 
-matplotlib.use('Agg')
 
 
 def read_data(datapath, normsid=None):
@@ -90,22 +90,25 @@ print("number of documents %d" % doc_num)
 # assert(len(neg_wordids[0]) == len(neg_wordcts[0]))
 # assert(len(pos_wordids) == len(neg_wordcts))
 
-batch_size = 512
-topic_num = 80
+topic_num = 100
+alpha = 1. / topic_num
 
+batch_size = 512
 tau0 = 1
 kappa = 0.5
 
+print("topic number %d, alpha %.2f, batch_size %d, tau %.2f, kappa %.2f" %
+      (topic_num, alpha, batch_size, tau0, kappa))
 if batch_flag:
     kappa = 0
 
 if negative_flag:
     print("using negative examples")
     neg_wordids, neg_wordcts = read_data(datapath + "negative")
-    model = dtsg.OnlineLDA(vocab2id, K=topic_num, D=doc_num, alpha=0.1,
+    model = dtsg.OnlineLDA(vocab2id, K=topic_num, D=doc_num, alpha=alpha,
                            eta=0.00000001, zeta=1, tau0=tau0, kappa=kappa)
 else:
-    model = poslda.OnlineLDA(vocab2id, K=topic_num, D=doc_num, alpha=0.1,
+    model = poslda.OnlineLDA(vocab2id, K=topic_num, D=doc_num, alpha=alpha,
                              eta=0.01, tau0=tau0, kappa=kappa)
 
 gamma = n.zeros((doc_num, topic_num))
@@ -157,6 +160,7 @@ else:
             i = ni
             print("number of documents processed: %d" % i)
         n.savetxt(outpath + 'gamma%d' % counter, model._gamma)
+        model._gamma = gamma
 
 # Saving the parameters
 if negative_flag:
