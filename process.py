@@ -9,24 +9,23 @@ import codecs
 import pandas
 import csv
 # Reads and process data used in the evaluation.
-from smart_open import smart_open
 
 class Glove_model(object):
     def __init__(self, glove_path):
         self.df = pandas.read_table(glove_path,sep = ' ', index_col=0, encoding='utf-8', quoting=csv.QUOTE_NONE)
-        
-        #make this into a faster to access object
-        self.activation = {}        
+
+        # make this into a faster to access object
+        self.activation = {}
         for index, row in self.df.iterrows():
             self.activation[index] = row
 
-        self.idx = 0 
-        self.vocab = set(self.df.index.tolist())    
-    
+        self.idx = 0
+        self.vocab = set(self.df.index.tolist())
+
     def similarity(self,word1, word2):
         vector1 = self.activation[word1]
-        vector2 = self.activation[word2]            
-        sim = 1 - scipy.spatial.distance.cosine(vector1,vector2)            
+        vector2 = self.activation[word2]
+        sim = 1 - scipy.spatial.distance.cosine(vector1,vector2)
         return(sim)
 
 def load_scores(path):
@@ -79,25 +78,20 @@ def get_w2v(w2vcos_pickle, w2vcond_pickle,
         model = gensim.models.Word2Vec.load_word2vec_format(w2v_path,
                                                             binary=True)
     else:  # Loading a model trained by gensim
-        #with smart_open(w2v_path, 'rb') as f:
-            #u = pickle._Unpickler(f)
-            #u.encoding = 'latin1'
-            #p = u.load()
-            #print(p)
-        #    print(w2v_path)
+        #with open(w2v_path, 'rb') as f:
         #    model = pickle.load(f.read(), encoding='latin1')
         #with open(w2v_path, 'wb') as output:
         #    pickle.dump(model, output)
         model = gensim.models.Word2Vec.load(w2v_path)
 
-    print("Done loading the Gensim model.")    
+    print("Done loading the Gensim model.")
 
     def softmax(x):
         return np.exp(x) / np.sum(np.exp(x), axis=0)
-    
-    model.column_normalized = np.apply_along_axis(softmax, axis=0, arr=model.syn0)
 
-    model.row_normalized= np.apply_along_axis(softmax, axis=1, arr=model.syn0)    
+    model.column_normalized = np.apply_along_axis(softmax, axis=0,
+                                                  arr=model.syn0)
+    model.row_normalized= np.apply_along_axis(softmax, axis=1, arr=model.syn0)
 
 
     w2v_cos, w2v_cond = {}, {}
@@ -112,8 +106,7 @@ def get_w2v(w2vcos_pickle, w2vcond_pickle,
         wordlist.add(cue)
 
         targetlist = list(set(list(norms[cue].keys()) + list(norms.keys())))
-
-        for target in targetlist:#norms:
+        for target in targetlist:
             if target not in model:
                 continue
             if target not in w2v_cos:
@@ -130,36 +123,19 @@ def get_w2v(w2vcos_pickle, w2vcond_pickle,
             for w in wordlist:
                 cue_context.append(model.similarity(cue, w))
             # Using words in the word_list to normalize the prob
-            p_cue = scipy.misc.logsumexp(np.asarray(cue_context))        
-            for target in w2v_cos[cue]:            
+            p_cue = scipy.misc.logsumexp(np.asarray(cue_context))
+            for target in w2v_cos[cue]:
                 w2v_cond[cue][target] = np.exp(w2v_cos[cue][target] - p_cue)
 
     elif cond_eq == 'eq4':
         word2id = dict(zip(model.vocab, range(len(model.vocab))))
-        id2word = dict(zip(word2id.values(), word2id.keys()))
-
-        num_topics = model.row_normalized.shape[1]
-        condprob = {}
-        for cue in norms:
-            if cue not in w2v_cos.keys():
-                continue
-            if cue not in condprob:
-                condprob[cue] = {}
-                
-            cue_topics_dist = model.row_normalized[word2id[cue],:]
-
-            # Calculate the cond prob for all the targets given the cue, and
-            # also all the possible cues
-            targetlist = list(set(list(norms[cue].keys()) + list(norms.keys())))
-            for target in targetlist:
-                if target not in word2id.keys():
-                    continue
-                if target not in condprob[cue]:
-                    condprob[cue][target] = 0
-                targetProbVector = model.column_normalized[word2id[target],:]
-                condprob[cue][target] = np.sum(cue_topics_dist * targetProbVector)
-
-
+        #id2word = dict(zip(word2id.values(), word2id.keys()))
+        #num_topics = model.row_normalized.shape[1]
+        for cue in w2v_cos.keys():
+            cue_topics_dist = model.row_normalized[word2id[cue], :]
+            for target in w2v_cos[cue]:
+                target_probvec = model.column_normalized[word2id[target], :]
+                w2v_cond[cue][target] = np.sum(cue_topics_dist * target_probvec)
 
     with open(w2vcond_pickle, 'wb') as output:
         pickle.dump(w2v_cond, output)
@@ -262,7 +238,7 @@ def get_allpairs(allpairs_pickle, norms, cbow=None, sg=None, lda=None, glove=Non
 
             if (glove is not None) and\
                     ((cue not in glove) or (target not in glove[cue])):
-                continue    
+                continue
 
             allpairs.append((cue, target))
 
@@ -414,7 +390,7 @@ def get_glove(glovecos_pickle, glovecond_pickle, glove_path,
         glove_cond = load_scores(glovecond_pickle)
         return glove_cos, glove_cond
 
-    model =  Glove_model(glove_path)    
+    model =  Glove_model(glove_path)
 
     print("Done loading the GloVe model.")
 
