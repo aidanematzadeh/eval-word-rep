@@ -107,8 +107,8 @@ def get_positive_examples(input_file, wsize, stoplist, norms=None):
                 print("number of words  %d" % len(dictionary))
 
             #TODO remove
-            if (counter + 1) % 2000 == 0:
-                break
+            #if (counter + 1) % 2000 == 0:
+            #    break
 
             words = [token for token in doc.split() \
                     if 2 < len(token) <= 15 and not token in stoplist]
@@ -189,7 +189,7 @@ if __name__ == "__main__":
 
     selected_words = set(new_word2id.keys())
     # Only keep positive examples that are selected in the new vocabulary
-    for (old_id, wfreq)  in cuefreq:
+    for (old_id, wfreq) in cuefreq:
         new_id = new_word2id[index2word[old_id]]
         new_bigram_counts[new_id] = {}
         for old_cid, cfreq in bigram_counts[old_id].items():
@@ -219,14 +219,14 @@ if __name__ == "__main__":
 
     for w_index in sorted(new_bigram_counts.keys()):
         # Writing the positive files
-        ids, counts = "%d:" % w_index, "%d:" % w_index
+        ids, counts = "%d: " % w_index, "%d: " % w_index
         for cw_index, freq in new_bigram_counts[w_index].items():
             ids += "%d " % cw_index
             counts += "%d " % freq
         idf.write(ids + "\n")
         cntf.write(counts + "\n")
         # Writing the negative files
-        ids, counts = "%d:" % w_index, "%d:" % w_index
+        ids, counts = "%d: " % w_index, "%d: " % w_index
         #ids, counts = "", ""
         for nw_index, freq in negative_counts[w_index].items():
             ids += "%d " % nw_index
