@@ -107,8 +107,8 @@ def get_positive_examples(input_file, wsize, stoplist, norms=None):
                 print("number of words  %d" % len(dictionary))
 
             #TODO remove
-            #if (counter + 1) % 2000 == 0:
-            #    break
+            if (counter + 1) % 2000 == 0:
+                break
 
             words = [token for token in doc.split() \
                     if 2 < len(token) <= 15 and not token in stoplist]
@@ -200,7 +200,8 @@ if __name__ == "__main__":
     print("Size of vocab", len(new_word2id))
     cum_dist = cumulative_dist(new_word_counts)
     print("Start getting negative examples.")
-    negative_counts = get_negative_examples(cum_dist, new_bigram_counts, new_id2word)
+    negative_counts = get_negative_examples(cum_dist, new_bigram_counts,
+                                            new_id2word)
 
 
     # Writing the positive examples and the dictionary
@@ -211,19 +212,22 @@ if __name__ == "__main__":
     neg_cntf = open(prefix + "negative_counts", 'w')
     w2idf =  open(prefix   + "word2id", 'w')
     print("start writing")
-    for w, w_index in new_word2id.items():
+
+    for w, w_index in sorted(new_word2id.items(), key=lambda x:x[1]):
         w2idf.write("%s %d %d\n" % (w, w_index, new_word_counts[w_index]))
     w2idf.close()
-    for w_index in new_bigram_counts.keys():
+
+    for w_index in sorted(new_bigram_counts.keys()):
         # Writing the positive files
-        ids, counts = "",""
+        ids, counts = "%d:" % w_index, "%d:" % w_index
         for cw_index, freq in new_bigram_counts[w_index].items():
             ids += "%d " % cw_index
             counts += "%d " % freq
         idf.write(ids + "\n")
         cntf.write(counts + "\n")
         # Writing the negative files
-        ids, counts = "", ""
+        ids, counts = "%d:" % w_index, "%d:" % w_index
+        #ids, counts = "", ""
         for nw_index, freq in negative_counts[w_index].items():
             ids += "%d " % nw_index
             counts += "%d " % freq
