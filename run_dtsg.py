@@ -101,7 +101,8 @@ def ldaworker(arguments):
             model = poslda.OnlineLDA(vocab2id, K=topic_num, D=doc_num,
                                      alpha=alpha, eta=eta, tau0=tau,
                                      kappa=kappa)
-            bounds = model.train(pos_wordids, pos_wordcts, fname, batch_size, 10)
+            bounds = model.online_train(pos_wordids, pos_wordcts, fname,
+                                        batch_size, 10)
 
         # Plotting bound and perplexity
         plt.plot(bounds)
