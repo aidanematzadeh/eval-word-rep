@@ -75,13 +75,11 @@ class OnlineLDA:
         # TODO Added this as a global parameter
         self._gamma = 1 * n.random.gamma(100., 1./100., (self._W, self._K))
 
-    def do_e_step(self, wordids, wordcts, begindex, endindex):
+    def do_e_step(self, wordids, wordcts, batchdocs):
         batchD = len(wordids)
         # Initialize the variational distribution q(theta|gamma) for
         # the mini-batch
-        # gamma = 1*n.random.gamma(100., 1./100., (batchD, self._K))
-        gamma = self._gamma[begindex: endindex]
-
+        gamma = self._gamma[batchdocs]
         Elogtheta = dirichlet_expectation(gamma)
         expElogtheta = n.exp(Elogtheta)
 
@@ -93,9 +91,11 @@ class OnlineLDA:
             # These are mostly just shorthand (but might help cache locality)
             ids = wordids[d]
             cts = wordcts[d]
+
             gammad = gamma[d, :]
             Elogthetad = Elogtheta[d, :]
             expElogthetad = expElogtheta[d, :]
+
             expElogbetad = self._expElogbeta[:, ids]
             # The optimal phi_{dwk} is proportional to
             # expElogthetad_k * expElogbetad_w. phinorm is the normalizer.
@@ -128,7 +128,7 @@ class OnlineLDA:
 
         return((gamma, sstats))
 
-    def update_lambda(self, wordids, wordcts, begindex, endindex):
+    def update_lambda(self, wordids, wordcts, batchdocs):
         """
         First does an E step on the mini-batch given in wordids and
         wordcts, then uses the result of that E step to update the
@@ -156,7 +156,7 @@ class OnlineLDA:
         # Do an E step to update gamma, phi | lambda for this
         # mini-batch. This also returns the information about phi that
         # we need to update lambda.
-        (gamma, sstats) = self.do_e_step(wordids, wordcts, begindex, endindex)
+        (gamma, sstats) = self.do_e_step(wordids, wordcts, batchdocs)
         # Estimate held-out likelihood for current values of lambda.
         bound = self.approx_bound(wordids, wordcts, gamma)
         # Update lambda based on documents.
@@ -217,3 +217,55 @@ class OnlineLDA:
                               gammaln(n.sum(self._lambda, 1)))
 
         return(score)
+
+    def online_train(self, wordids, wordcts, fname, batch_size=1, epoch=1):
+        '''  train the model '''
+        bounds = []
+        doc_num = len(wordids)
+        for counter in range(epoch):
+            print("counter %d" % counter)
+            doc_ids = n.arange(doc_num)
+            n.random.shuffle(doc_ids)
+            i = 0
+            while i < doc_num:
+                batchdocs = doc_ids[i: min(i + batch_size, doc_num)]
+                gamma, bound = self.update_lambda(wordids[batchdocs],
+                                             wordcts[batchdocs],
+                                             batchdocs)
+
+                counts_sum = sum(map(sum, wordcts[batchdocs]))
+
+                wbound = bound * len(wordids[batchdocs]) / (doc_num * counts_sum)
+                wbound = n.exp(-wbound)
+                print('%d: rho_t=%f,  held-out perplex. estimate=%f,\
+                            approxbound=%.5f' % (i, self._rhot, wbound, bound))
+                bounds.append(bound)
+                i += len(batchdocs)
+                print("number of documents processed: %d" % i)
+
+            n.savetxt(fname + '-gamma%d' % counter, self._gamma)
+            n.savetxt(fname + '-lambda%d' % counter, self._lambda)
+
+        # Saving the final parameters
+        n.savetxt(fname + '-lambda%d' % len(self._lambda.T), self._lambda)
+        n.savetxt(fname + '-gamma%d' % len(self._gamma), self._gamma)
+        print("saved the model")
+        return bounds
+
+    def print_topics(self, id2vocab, num=35):
+        # Printing the topics
+        final_lambda = self._lambda
+        for k in range(0, len(final_lambda)):
+            lambdak = final_lambda[k]
+            lambdak = lambdak / sum(lambdak)
+
+            temp = zip(lambdak, range(0, len(lambdak)))
+            temp = sorted(temp, key=lambda x: x[0], reverse=True)
+            print('topic %d:' % (k))
+            # feel free to change the "53" here to whatever fits your screen nicely.
+            for index in range(num):
+                print('%20s  \t--\t  %.4f' % \
+                    (id2vocab[temp[index][1]], temp[index][0]))
+            print()
+
+
