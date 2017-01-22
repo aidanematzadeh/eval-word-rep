@@ -291,3 +291,61 @@ class OnlineLDA:
                               gammaln(self._lambda + self._mu))
 
         return(score)
+
+    def online_train(self, wordids, wordcts, neg_wordids, neg_wordcts, fname, batch_size=1, epoch=1):
+        '''  train the model '''
+        bounds = []
+        doc_num = len(wordids)
+        for counter in range(epoch):
+            print("counter %d" % counter)
+            doc_ids = n.arange(doc_num)
+            n.random.shuffle(doc_ids)
+            i = 0
+            while i < doc_num:
+                batchdocs = doc_ids[i: min(i + batch_size, doc_num)]
+                gamma, bound = self.update_lambda(wordids[batchdocs],wordcts[batchdocs],
+                                                  neg_wordids[batchdocs],
+                                                       neg_wordcts[batchdocs],
+                                                       batchdocs)
+
+                counts_sum = sum(map(sum, wordcts[batchdocs]))
+                counts_sum += sum(map(sum, neg_wordcts[batchdocs]))
+
+                wbound = bound * len(wordids[batchdocs]) / (doc_num * counts_sum)
+                wbound = n.exp(-wbound)
+                print('%d: rho_t=%f,  held-out perplex. estimate=%f,\
+                            approxbound=%.5f' % (i, self._rhot, wbound, bound))
+                bounds.append(bound)
+                i += len(batchdocs)
+                print("number of documents processed: %d" % i)
+
+            n.savetxt(fname + '-gamma%d' % counter, self._gamma)
+            n.savetxt(fname + '-lambda%d' % counter, self._lambda)
+            n.savetxt(fname + '-mu%d' % counter, self._mu)
+
+        # Saving the final parameters
+        n.savetxt(fname + '-lambda%d' % len(self._lambda.T), self._lambda)
+        n.savetxt(fname + '-gamma%d' % len(gamma), self._gamma)
+        n.savetxt(fname + '-mu%d' % len(model._mu.T), self._mu)
+        print("saved the model")
+        return bounds
+
+
+    def print_topics(self, id2vocab, num=35):
+        # Printing the topics
+        final_lambda = self._lambda
+        for k in range(0, len(final_lambda)):
+            lambdak = final_lambda[k]
+            denom = (lambdak + self._mu[k])
+            lambdak = lambdak / denom
+
+            temp = zip(lambdak, range(0, len(lambdak)))
+            temp = sorted(temp, key=lambda x: x[0], reverse=True)
+            print('topic %d:' % (k))
+            # feel free to change the "53" here to whatever fits your screen nicely.
+            for index in range(num):
+                print('%20s  \t--\t  %.4f' % \
+                    (id2vocab[temp[index][1]], temp[index][0]))
+            print()
+
+
