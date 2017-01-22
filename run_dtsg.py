@@ -1,193 +1,195 @@
+import os
 import sys
+import multiprocessing
+import itertools
+import logging
+import argparse
 import numpy as n
-
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
 
 import dtsg
 import hofonlineldavb as poslda
 import process
 
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+
+# time python3.5 run_dtsg.py data/wikipedia_sw_norms_100k/5w_
+# test_results/jan16pos/ positive online all data/nelson_norms/ | tee
+# test_results/jan16pos/log
+
+# stream class is taken from electricmonk.nl
+class StreamToLogger(object):
+    """
+    Fake file-like stream object that redirects writes to a logger instance.
+     """
+    def __init__(self, logger, log_level=logging.INFO):
+        self.logger = logger
+        self.log_level = log_level
+        self.linebuf = ''
+
+    def write(self, buf):
+        for line in buf.rstrip().splitlines():
+            self.logger.log(self.log_level, line.rstrip())
 
 
-def read_data(datapath, normsid=None):
-    # Reading the word ids and counts
-    idfile = open(datapath + "_ids", 'r')
-    countfile = open(datapath + "_counts", 'r')
-
-    ids, counts = [], []
-    for index, (idline, ctline) in enumerate(zip(idfile, countfile)):
-        # if normsid != None and not index in normsid: continue
-        docids, doccounts = [], []
-        for wid, count in zip(idline.split(), ctline.split()):
-            docids.append(int(wid))
-            doccounts.append(int(count))
-        ids.append(docids)
-        counts.append(doccounts)
-    return ids, counts
 
 
-def read_dic(filename):
-    word2id, id2word = {}, {}
-    wordfreq = []
-    with open(filename, 'r') as f:
-        for line in f:
-            w, wid, wfreq = line.split()
-            word2id[w] = int(wid)
-            id2word[int(wid)] = w
-            wordfreq.append([w, int(wid), int(wfreq)])
-    wordfreq.sort(key=lambda tup: tup[2], reverse=True)
-    return word2id, id2word, wordfreq
+lock_dir = "/opt/local/amint/anc/lockfiles/"
+def ldaworker(arguments):
+    pairs, args = arguments
+    negative_flag = (args.negflag.lower() == 'neg')
+    pos_wordids, pos_wordcts = process.read_tsgdata(args.datapath +
+                                                    "positive_counts",
+                                                    args.datapath +
+                                                    "positive_ids")
+    pos_wordids =n.array(pos_wordids)
+    pos_wordcts =n.array(pos_wordcts)
 
-
-# Main
-
-# infile = sys.argv[1]
-# K = int(sys.argv[2])
-# alpha = float(sys.argv[3])
-# eta = float(sys.argv[4])
-# kappa = float(sys.argv[5])
-# S = int(sys.argv[6])
-
-datapath = sys.argv[1]
-outpath = sys.argv[2]
-# To use negative examples or not
-negative_flag = sys.argv[3]
-# To do batch or online processing
-batch_flag = sys.argv[4]
-# To train on all the vocabulary or only norms
-norm_flag = sys.argv[5]
-norms_path = sys.argv[6]
-
-negative_flag = (negative_flag.lower() == 'neg')
-batch_flag = (batch_flag.lower() == 'batch')
-norm_flag = (norm_flag.lower() == 'norm')
-
-print("negative", negative_flag, "batch", batch_flag, "norm", norm_flag)
-vocab2id, id2vocab, wordfreq = read_dic(datapath + "word2id")
-vocab_size = len(vocab2id)
-
-normsid = None
-if norm_flag:
-    normsid = []
-    norms = process.get_norms(outpath+"/norms.pickle", norms_path)
-    for cue in norms:
-        if cue in vocab2id.keys():
-            normsid.append(vocab2id[cue])
-    print(len(normsid), normsid[1:10])
-
-
-pos_wordids, pos_wordcts = read_data(datapath + "positive")
-assert(len(pos_wordids) == len(pos_wordcts))
-assert(len(pos_wordids[0]) == len(pos_wordcts[0]))
-
-# Number of documents
-doc_num = len(pos_wordids)
-print("number of documents %d" % doc_num)
-
-# assert(len(neg_wordids) == len(neg_wordcts))
-# assert(len(neg_wordids[0]) == len(neg_wordcts[0]))
-# assert(len(pos_wordids) == len(neg_wordcts))
-
-topic_num = 100
-alpha = 1. / topic_num
-
-batch_size = 512
-tau0 = 1
-kappa = 0.5
-
-print("topic number %d, alpha %.2f, batch_size %d, tau %.2f, kappa %.2f" %
-      (topic_num, alpha, batch_size, tau0, kappa))
-if batch_flag:
-    kappa = 0
-
-if negative_flag:
-    print("using negative examples")
-    neg_wordids, neg_wordcts = read_data(datapath + "negative")
-    model = dtsg.OnlineLDA(vocab2id, K=topic_num, D=doc_num, alpha=alpha,
-                           eta=0.00000001, zeta=1, tau0=tau0, kappa=kappa)
-else:
-    model = poslda.OnlineLDA(vocab2id, K=topic_num, D=doc_num, alpha=alpha,
-                             eta=0.01, tau0=tau0, kappa=kappa)
-
-gamma = n.zeros((doc_num, topic_num))
-bounds = []
-perplexity = []
-
-if batch_flag:
-    relative_change = 1
-    for counter in range(0, 4):
-        gamma, bound = model.update_lambda(pos_wordids, pos_wordcts)
-        counts_sum = sum(map(sum, pos_wordcts))
-        wbound = bound * len(pos_wordids) / (doc_num * counts_sum)
-
-        if len(bounds) > 1:
-            relative_change = bound - bounds[-1]
-
-        print("counter", counter)
-        print("relative_change", relative_change)
-        print('rho_t = %f,  held-out perplexity estimate = %f, \
-              approx bound = %.5f' % (model._rhot, n.exp(-wbound), bound))
-        perplexity.append(wbound)
-        bounds.append(bound)
-else:
-    for counter in range(0, 10):
-        print("counter", counter)
-        i = 0
-        while i < doc_num:
-            ni = min(i + batch_size, doc_num)
-            print(i, ni)
-            if negative_flag:
-                gamma[i:ni], bound = model.update_lambda(pos_wordids[i:ni],
-                                                         pos_wordcts[i:ni],
-                                                         neg_wordids[i:ni],
-                                                         neg_wordcts[i:ni],
-                                                         i, ni)
-                counts_sum = (sum(map(sum, pos_wordcts[i:ni])) +
-                              sum(map(sum, neg_wordcts[i:ni])))
-            else:
-                gamma[i:ni], bound = model.update_lambda(pos_wordids[i:ni],
-                                                         pos_wordcts[i:ni],
-                                                         i, ni)
-                counts_sum = sum(map(sum, pos_wordcts[i:ni]))
-
-            wbound = bound * len(pos_wordids[i:ni]) / (doc_num * counts_sum)
-            print('%d:  rho_t = %f,  held-out perplexity estimate = %f, approx\
-                  bound = %.5f' % (i, model._rhot, n.exp(-wbound), bound))
-            perplexity.append(wbound)
-            bounds.append(bound)
-            i = ni
-            print("number of documents processed: %d" % i)
-        n.savetxt(outpath + 'gamma%d' % counter, model._gamma)
-        model._gamma = gamma
-
-# Saving the parameters
-if negative_flag:
-    n.savetxt(outpath + '/mu%d' % len(model._mu.T), model._mu)
-n.savetxt(outpath + '/lambda%d' % len(model._lambda.T), model._lambda)
-n.savetxt(outpath + '/gamma%d' % len(gamma), gamma)
-
-# Plotting bound and perplexity
-plt.plot(bounds)
-plt.savefig(outpath + "/bound_plot%d.png" % len(gamma))
-
-plt.plot(perplexity)
-plt.savefig(outpath + "/perplexity_plot%d.png" % len(gamma))
-
-# Printing the topics
-final_lambda = model._lambda
-for k in range(0, len(final_lambda)):
-    lambdak = final_lambda[k]
+    vocab2id, id2vocab = process.read_tsgvocab(args.datapath + "word2id")
     if negative_flag:
-        denom = (lambdak + model._mu[k])
-        lambdak = lambdak / denom
-    else:
-        lambdak = lambdak / sum(lambdak)
-    temp = zip(lambdak, range(0, len(lambdak)))
-    temp = sorted(temp, key=lambda x: x[0], reverse=True)
-    print('topic %d:' % (k))
-    # feel free to change the "53" here to whatever fits your screen nicely.
-    for index in range(0, 35):
-        print('%20s  \t--\t  %.4f' % (id2vocab[temp[index][1]], temp[index][0]))
-    print()
+        neg_wordids, neg_wordcts = process.read_tsgdata(args.datapath +
+                                                        "negative_counts",
+                                                        args.datapath +
+                                                        "negative_ids")
+    # assert(len(pos_wordids) == len(pos_wordcts))
+    # assert(len(pos_wordids[0]) == len(pos_wordcts[0]))
+
+    for topic_num, batch_size, tau, kappa, eta, alpha in pairs:
+        fname = "topics-%d-bsize-%d-tau-%f-kappa-%f-eta-%f-alpha-%f" %\
+             (topic_num, batch_size, tau, kappa, eta, alpha)
+        # Number of documents
+        doc_num = len(pos_wordids)
+
+        # make sure the run does not exist
+        lockfile = (lock_dir + args.negflag + "-" + fname)
+        if os.path.exists(lockfile): continue
+        open(lockfile,'w').close()
+
+        # create the logger
+        logger = logging.getLogger('LDA Worker %d' % os.getpid())
+        fh = logging.FileHandler(args.outpath + '/ldaworker-%d-%s.log' %
+                                 (os.getpid(), fname))
+        fh.setLevel(logging.INFO)
+        ch = logging.StreamHandler()
+        ch.setLevel(logging.INFO)
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        fh.setFormatter(formatter)
+        ch.setFormatter(formatter)
+        logger.addHandler(ch)
+        rootlog = logging.getLogger()
+        rootlog.addHandler(fh)
+        rootlog.setLevel(logging.INFO)
+
+        logger.info("number of documents %d" % doc_num)
+        logger.info("vocab size %d" %  len(vocab2id))
+        logger.info("param info %s" % fname)
+
+        sl = StreamToLogger(logger, logging.INFO)
+        sys.stdout = sl
+
+        fname = args.outpath + fname
+        # creating the model
+        if negative_flag:
+            logger.info("creating the negative model")
+            model = dtsg.OnlineLDA(vocab2id, K=topic_num, D=doc_num, alpha=alpha,
+                            eta=eta, zeta=1, tau0=tau, kappa=kappa)
+            bounds = model.online_train(pos_wordids, pos_wordcts, neg_wordids,
+                               neg_wordcts, fname, batch_size, 10)
+        else:
+            logger.info("creating the positive model")
+            model = poslda.OnlineLDA(vocab2id, K=topic_num, D=doc_num,
+                                     alpha=alpha, eta=eta, tau0=tau,
+                                     kappa=kappa)
+            bounds = model.train(pos_wordids, pos_wordcts, fname, batch_size, 10)
+
+        # Plotting bound and perplexity
+        plt.plot(bounds)
+        plt.savefig(fname +"bound_plot%d.png" % len(pos_wordids))
+
+        # printing topics
+        model.print_topics(id2vocab)
+
+        fh.flush()
+        ch.flush()
+
+
+def get_chunks(iterable, chunks=1):
+    lst = list(iterable)
+    return [lst[i::chunks] for i in range(chunks) if len(lst[i::chunks]) > 0]
+
+if __name__ == '__main__':
+    argparser = argparse.ArgumentParser()
+    argparser.add_argument("datapath", type=str, help="Input path to positive/negative counts/ids and word2id map")
+    argparser.add_argument("outpath", type=str, help="Directory to place output files")
+    # argparser.add_argument("normspath", type=str, help="Directory to place output files")
+
+    argparser.add_argument("negflag", help="Use negative (neg) examples or not")
+    # argparser.add_argument("batchflag", help="Batch (batch) or online processing")
+    # argparser.add_argument("normsflag", help="Use only norms or all vocab")
+    args = argparser.parse_args()
+
+    logger = logging.getLogger('LDA Master')
+    logger.setLevel(logging.INFO)
+    # create file handler which logs even debug messages
+    fh = logging.FileHandler(args.outpath + '/ldamaster.log')
+    fh.setLevel(logging.INFO)
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.INFO)
+    # create formatter and add it to the handlers
+    formatter = logging.Formatter('%(asctime)s - %(name)s -\
+                                  %(levelname)s - %(message)s')
+    fh.setFormatter(formatter)
+    ch.setFormatter(formatter)
+    # add the handlers to the logger
+    logger.addHandler(fh)
+    logger.addHandler(ch)
+
+
+    # Parameter search
+    topic_num = [100, 200, 300, 500]  # numpy.arange(20, 100, 20)
+    batch_size = [512]  # [1, 4, 16, 64, 256, 512]
+
+    tau = [1]  # [1, 4, 16, 64, 256, 512]
+    kappa = [0.5]  # numpy.arange(0.5, 1, 0.1)
+
+    eta = [0.001, 0.0001, 0.000001]
+    alpha = [0.01, 0.001, 0.000001]
+
+    pairs = itertools.product(topic_num, batch_size, tau, kappa, eta, alpha)
+    logger.info("number of parameters: %d" % (len(topic_num) * len(batch_size) *
+                                              len(tau) * len(kappa) *
+                                              len(eta) * len(alpha)))
+
+    chunked_pairs = get_chunks(pairs, chunks=(multiprocessing.cpu_count()))
+    logger.info("chunked pairs %d" % len(chunked_pairs))
+
+    pool = multiprocessing.Pool()
+    results = pool.map(ldaworker, zip(chunked_pairs, [args]*len(chunked_pairs)))
+    pool.close()
+    pool.join()
+
+#if batch_flag:
+#            kappa = 0
+
+# batch_flag = (args.batchflag.lower() == 'batch')
+
+#        if batch_flag:
+
+#            relative_change = 1
+#            for counter in range(0, 4):
+#                gamma, bound = model.update_lambda(pos_wordids, pos_wordcts)
+#                counts_sum = sum(map(sum, pos_wordcts))
+#                wbound = bound * len(pos_wordids) / (doc_num * counts_sum)
+
+#                if len(bounds) > 1:
+#                    relative_change = bound - bounds[-1]
+
+ #               print("counter", counter)
+ #               print("relative_change", relative_change)
+ #               print('rho_t = %f,  held-out perplexity estimate = %f, \
+ #                   approx bound = %.5f' % (model._rhot, n.exp(-wbound), bound))
+ #               perplexity.append(wbound)
+ #               bounds.append(bound)
+ #       else:
+
