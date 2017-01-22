@@ -111,13 +111,13 @@ if __name__ == "__main__":
                 ("bin-cbow-cos", cbow_cos),
                 ("sg-cond", sg_cond),
                 ("sg-cos", sg_cos),
-                ("tsg-freq", tsg_freq),
                 ("tsg-pos", tsg_pos),
                 ("tsg-neg", tsg_neg),
                 ("tsg-neg-norm", tsg_neg_norm),
                 ("glove-cos", glove_cos),
                 ("glove-cond", glove_cond)]
 
+               # ("tsg-freq", tsg_freq),
 
     print("Asymmetries")
     asyms = {} #defaultdict(lambda: defaultdict(list))
