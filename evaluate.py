@@ -57,7 +57,7 @@ def traingle_inequality_threshold(tuples, scores, common_words, thresholds=None)
     for t in thresholds:
         prob_dist_thresh[t] = []
 
-    for w1,w2,w3 in tuples:
+    for w1, w2, w3 in tuples:
         # TODO: this can be done more efficiently, not need to do this for all the thresholds
         for t in thresholds:
             if scores[w1][w2] >= t and scores[w2][w3] >= t:
