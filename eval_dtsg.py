@@ -1,5 +1,5 @@
 """
-Run the evaluation methods for a discriminitive topic skipgram model.
+Run the evaluation methods for different models.
 """
 import numpy as np
 import argparse
@@ -36,11 +36,16 @@ if __name__ == "__main__":
     argparser.add_argument("--sgcond_eq", type=str, default=None, help="Which equation should be used to compute the conditional probability?")
     #
     argparser.add_argument("--tsg_vocabpath", type=str, help="Input TSG word2id")
+    argparser.add_argument("--tsg_countspath", type=str, help="Input TSG POS counts")
+    argparser.add_argument("--tsg_idspath", type=str, help="Input TSG POS ids")
+    argparser.add_argument("--tsgfreq_pickle", type=str, help="Input TSG freq pickle.")
+    #
     argparser.add_argument("--tsgpos_pickle", type=str, help="Input TSGPOS cond prob pickle.")
     argparser.add_argument("--tsgpos_gammapath", type=str, help="Input TSGPOS gamma.")
     argparser.add_argument("--tsgpos_lambdapath", type=str, help="Input TSGPOS lambda.")
     #
     argparser.add_argument("--tsgneg_pickle", type=str, help="Input TSGNEG cond prob pickle.")
+    argparser.add_argument("--tsgnegnorm_pickle", type=str, help="Input TSGNEG cond prob pickle.")
     argparser.add_argument("--tsgneg_gammapath", type=str, help="Input TSGNEG gamma.")
     argparser.add_argument("--tsgneg_lambdapath", type=str, help="Input TSGNEG lambda.")
     argparser.add_argument("--tsgneg_mupath", type=str, help="Input TSGNEG mu.")
@@ -66,18 +71,26 @@ if __name__ == "__main__":
                                       norms, args.sg_path, False,
                                       args.sgcond_eq)
 
-    tsg_pos = process.get_lda(args.tsgpos_pickle, norms, args.tsg_vocabpath,
+    tsg_pos = process.get_tsg(args.tsgpos_pickle, norms, args.tsg_vocabpath,
                           args.tsgpos_lambdapath, args.tsgpos_gammapath)
 
-    tsg_neg = process.get_lda(args.tsgneg_pickle, norms, args.tsg_vocabpath,
-                          args.tsgneg_lambdapath, args.tsgneg_gammapath, args.tsgneg_mupath)
+    tsg_neg = process.get_tsg(args.tsgneg_pickle, norms, args.tsg_vocabpath,
+                              args.tsgneg_lambdapath, args.tsgneg_gammapath,
+                              args.tsgneg_mupath)
 
+    tsg_neg_norm = process.get_tsg(args.tsgnegnorm_pickle, norms,
+                                   args.tsg_vocabpath, args.tsgneg_lambdapath,
+                                   args.tsgneg_gammapath, None)
 
+    tsg_freq = process.get_tsgfreq(args.tsgfreq_pickle, norms,
+                                   args.tsg_vocabpath, args.tsg_countspath,
+                                   args.tsg_idspath)
 
+    #for cue in tsg_freq:
+        #assert len(tsg_freq[cue]) == len(tsg_pos[cue])
     glove_cos, glove_cond =  process.get_glove(args.glovecos_pickle,
                                                args.glovecond_pickle,
                                                args.glove_path, norms)
-
 
     # Find the common pairs among the different models
     allpairs = process.get_allpairs(args.allpairs_pickle, norms, cbow_cos,
@@ -98,7 +111,10 @@ if __name__ == "__main__":
                 ("bin-cbow-cos", cbow_cos),
                 ("sg-cond", sg_cond),
                 ("sg-cos", sg_cos),
+                ("tsg-freq", tsg_freq),
                 ("tsg-pos", tsg_pos),
+                ("tsg-neg", tsg_neg),
+                ("tsg-neg-norm", tsg_neg_norm),
                 ("glove-cos", glove_cos),
                 ("glove-cond", glove_cond)]
 
