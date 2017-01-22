@@ -3,6 +3,7 @@ import gensim
 import numpy as np
 import scipy.io as sio
 import scipy
+import scipy.spatial
 import pickle
 import os.path
 import codecs
@@ -105,7 +106,7 @@ def get_w2v(w2vcos_pickle, w2vcond_pickle,
             w2v_cos[cue], w2v_cond[cue] = {}, {}
         wordlist.add(cue)
 
-        targetlist = list(set(list(norms[cue].keys()) + list(norms.keys())))
+        targetlist = set(list(norms[cue].keys()) + list(norms.keys()))
         for target in targetlist:
             if target not in model:
                 continue
@@ -148,7 +149,8 @@ def get_w2v(w2vcos_pickle, w2vcond_pickle,
     return w2v_cos, w2v_cond
 
 
-def get_lda(lda_path, norms=None, vocab_path=None,
+
+def get_tsg(tsg_path, norms=None, vocab_path=None,
             lambda_path=None, gamma_path=None, mu_path=None):
     """ Get the cond prob for word representations learned by
     Hoffman-VBLDA-based code.
@@ -156,13 +158,11 @@ def get_lda(lda_path, norms=None, vocab_path=None,
     p(topic|cue) = theta_cue[topic] because document is the cue
     vocab_path: the word2id mappings
     """
-    if os.path.exists(lda_path):
-        return load_scores(lda_path)
 
-    word2id = {}
-    with open(vocab_path, 'r') as f:
-        for line in f:
-            word2id[line.split()[0]] = int(line.split()[1])
+    if os.path.exists(tsg_path):
+        return load_scores(tsg_path)
+
+    word2id, id2word = read_tsgvocab(vocab_path)
 
     # Getting the topic-word probs -- p(topic|cue)
     topics = np.loadtxt(lambda_path)
@@ -192,11 +192,11 @@ def get_lda(lda_path, norms=None, vocab_path=None,
             condprob[cue] = {}
 
         # Topic distribution of the document associated with cue
-        cueid = word2id[cue]  # TODO would this be true
+        cueid = word2id[cue]
         cue_topics_dist = gamma[cueid] / sum(gamma[cueid])  # Normalize gamma
         # Calculate the cond prob for all the targets given the cue, and
         # also all the possible cues
-        targetlist = list(set(list(norms[cue].keys()) + list(norms.keys())))
+        targetlist = set(list(norms[cue].keys()) + list(norms.keys()))
         for target in targetlist:
             if target not in word2id.keys():
                 continue
@@ -207,10 +207,73 @@ def get_lda(lda_path, norms=None, vocab_path=None,
                 condprob[cue][target] += topics[k][targetid] *\
                     cue_topics_dist[k]
 
-    with open(lda_path, 'wb') as output:
+    with open(tsg_path, 'wb') as output:
         pickle.dump(condprob, output)
 
     return condprob
+
+
+def read_tsgdata(counts_path, ids_path):
+    # Reading the word ids and counts
+    idfile = open(ids_path, 'r')
+    countfile = open(counts_path, 'r')
+    ids, counts = [], []
+    for index, (idline, ctline) in enumerate(zip(idfile, countfile)):
+        # assert index == int(idline.split()[0].strip(':'))
+        ids.append([int(wid) for wid in idline.split()[1:]])
+        counts.append([int(wcount) for wcount in ctline.split()[1:]])
+    return ids, counts
+
+
+def read_tsgvocab(vocab_path):
+    word2id, id2word = {}, {}
+    with open(vocab_path, 'r') as f:
+        for line in f:
+            w, wid, wfreq = line.split()
+            word2id[w] = int(wid)
+            id2word[int(wid)] = w
+    return word2id, id2word
+
+
+def get_tsgfreq(tsgfreq_path, norms=None, vocab_path=None,
+                counts_path=None, ids_path=None):
+    """ Get the freq of each word in the documents in TSG model.
+    vocab_path: the word2id mappings
+    """
+    if os.path.exists(tsgfreq_path):
+        return load_scores(tsgfreq_path)
+
+    ids, counts = read_tsgdata(counts_path, ids_path)
+    word2id, id2word = read_tsgvocab(vocab_path)
+
+    tsgfreq = {}
+    for cue in norms:
+        if cue not in word2id.keys():
+            continue
+        if cue not in tsgfreq:
+            tsgfreq[cue] = {}
+
+        cueid = word2id[cue]
+
+        targetlist = set(list(norms[cue].keys()) + list(norms.keys()))
+        for targetid, targetcount in zip(ids[cueid], counts[cueid]):
+            target = id2word[targetid]
+            if target not in targetlist:
+                continue
+            tsgfreq[cue][target] = targetcount
+
+        # TODO some of the targets do not happen in the document,
+        # their freq is zero.
+        for target in targetlist:
+            if target not in word2id.keys():
+                continue
+            if target not in tsgfreq[cue].keys():
+                tsgfreq[cue][target] = 0
+    with open(tsgfreq_path, 'wb') as output:
+        pickle.dump(tsgfreq, output)
+
+    return tsgfreq
+
 
 
 def get_allpairs(allpairs_pickle, norms, cbow=None, sg=None, lda=None, glove=None):
@@ -279,6 +342,7 @@ def get_tuples(norms, allpairs):
     tuples that their pairs exist in Nelson norms.
     """
     # TODO make faster
+    allpairs = set(allpairs)
     tuples = []
     for w1 in norms:
         for w2 in norms[w1]:
@@ -293,6 +357,66 @@ def get_tuples(norms, allpairs):
                     tuples.append((w1, w2, w3))
     return tuples
 
+def get_glove(glovecos_pickle, glovecond_pickle, glove_path,
+            norms=None):
+    """ Load (Gensim) Word2Vec representations for words in norms and popluate
+    their similarities using cosine and p(w2|w1).
+    Uses gensim to load the representations.
+    """
+    if os.path.exists(glovecos_pickle) and os.path.exists(glovecond_pickle):
+        glove_cos = load_scores(glovecos_pickle)
+        glove_cond = load_scores(glovecond_pickle)
+        return glove_cos, glove_cond
+
+    model =  Glove_model(glove_path)
+    print("Done loading the GloVe model.")
+
+    glove_cos, glove_cond = {}, {}
+    # List of all the norms in the model. Used in normalization of cond prob.
+    wordlist = set([])
+    # Note that the cosine is the same as dot product for cbow vectors
+    # print('Getting cosine similarity')
+    for cue in norms:
+        # print('Getting cosine similarity: '+cue)
+        if cue not in model.vocab:
+            continue
+        if cue not in glove_cos:
+            glove_cos[cue], glove_cond[cue] = {}, {}
+        wordlist.add(cue)
+
+        targetlist = set(list(norms[cue].keys()) + list(norms.keys()))
+        for target in targetlist:
+            #print('Checking target: '+target)
+            if target not in model.vocab:
+                continue
+            if target not in glove_cos:
+                glove_cos[target], glove_cond[target] = {}, {}
+            if target not in glove_cos[cue]:
+                glove_cos[cue][target] = model.similarity(cue, target)
+                glove_cos[target][cue] = glove_cos[cue][target]
+
+    # Calculate p(target|cue) where cue is w1 and target is w2
+    # log(p(w2|w1)) = log(exp(w2.w1)) - log(sum(exp(w',w1)))
+    # print('Getting conditional similarity')
+    for cue in glove_cos.keys():
+        # print('Getting conditional similarity: '+cue)
+        cue_context = []
+        for w in wordlist:
+            cue_context.append(model.similarity(cue, w))
+        # Using words in the word_list to normalize the prob
+        p_cue = scipy.misc.logsumexp(np.asarray(cue_context))
+        for target in glove_cos[cue]:
+            glove_cond[cue][target] = np.exp(glove_cos[cue][target] - p_cue)
+
+    with open(glovecond_pickle, 'wb') as output:
+        pickle.dump(glove_cond, output)
+    with open(glovecos_pickle, 'wb') as output:
+        pickle.dump(glove_cos, output)
+
+    print("cosine size %d norms size %d cond size %d" %
+          (len(glove_cos), len(norms), len(glove_cond)))
+
+    return glove_cos, glove_cond
 
 # TODO need to rewrite
 def read_gensimlda(ldapath, norm2doc_path, corpus_path, norms, word_list):
@@ -379,68 +503,6 @@ def mm2dt(mmcorpus_path, vocab_path):
     #
     return dt, vocab
 
-def get_glove(glovecos_pickle, glovecond_pickle, glove_path,
-            norms=None):
-    """ Load (Gensim) Word2Vec representations for words in norms and popluate
-    their similarities using cosine and p(w2|w1).
-    Uses gensim to load the representations.
-    """
-    if os.path.exists(glovecos_pickle) and os.path.exists(glovecond_pickle):
-        glove_cos = load_scores(glovecos_pickle)
-        glove_cond = load_scores(glovecond_pickle)
-        return glove_cos, glove_cond
-
-    model =  Glove_model(glove_path)
-
-    print("Done loading the GloVe model.")
-
-    glove_cos, glove_cond = {}, {}
-    # List of all the norms in the model. Used in normalization of cond prob.
-    wordlist = set([])
-    # Note that the cosine is the same as dot product for cbow vectors
-    print('Getting cosine similarity')
-    for cue in norms:
-        print('Getting cosine similarity: '+cue)
-        if cue not in model.vocab:
-            continue
-        if cue not in glove_cos:
-            glove_cos[cue], glove_cond[cue] = {}, {}
-        wordlist.add(cue)
-
-        targetlist = list(set(list(norms[cue].keys()) + list(norms.keys())))
-
-        for target in targetlist:#norms:
-            #print('Checking target: '+target)
-            if target not in model.vocab:
-                continue
-            if target not in glove_cos:
-                glove_cos[target], glove_cond[target] = {}, {}
-            if target not in glove_cos[cue]:
-                glove_cos[cue][target] = model.similarity(cue, target)
-                glove_cos[target][cue] = glove_cos[cue][target]
-
-    # Calculate p(target|cue) where cue is w1 and target is w2
-    # log(p(w2|w1)) = log(exp(w2.w1)) - log(sum(exp(w',w1)))
-    print('Getting conditional similarity')
-    for cue in glove_cos.keys():
-        print('Getting conditional similarity: '+cue)
-        cue_context = []
-        for w in wordlist:
-            cue_context.append(model.similarity(cue, w))
-        # Using words in the word_list to normalize the prob
-        p_cue = scipy.misc.logsumexp(np.asarray(cue_context))
-        for target in glove_cos[cue]:
-            glove_cond[cue][target] = np.exp(glove_cos[cue][target] - p_cue)
-
-    with open(glovecond_pickle, 'wb') as output:
-        pickle.dump(glove_cond, output)
-    with open(glovecos_pickle, 'wb') as output:
-        pickle.dump(glove_cos, output)
-
-    print("cosine size %d norms size %d cond size %d" %
-          (len(glove_cos), len(norms), len(glove_cond)))
-
-    return glove_cos, glove_cond
 
 
 
