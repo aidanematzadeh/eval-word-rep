@@ -95,7 +95,7 @@ class OnlineLDA:
         self._negExpElogbeta = n.exp(self._negElogbeta)
 
         # changed: added this as a global parameter
-        self._gamma = 1 * n.random.gamma(100., 1./100., (self._W, self._K))
+        self._gamma = 1 * n.random.gamma(100., 1./100., (self._D, self._K))
 
         print("E[log beta]", self._posElogbeta[0][1:10])
         print("exp(E[log beta])", self._posExpElogbeta[0][1:10])
