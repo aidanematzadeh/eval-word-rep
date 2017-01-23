@@ -89,20 +89,22 @@ def ldaworker(arguments):
         sys.stdout = sl
 
         fname = args.outpath + fname
+        epochs = 3
+
         # creating the model
         if negative_flag:
             logger.info("creating the negative model")
             model = dtsg.OnlineLDA(vocab2id, K=topic_num, D=doc_num, alpha=alpha,
                             eta=eta, zeta=1, tau0=tau, kappa=kappa)
             bounds = model.online_train(pos_wordids, pos_wordcts, neg_wordids,
-                               neg_wordcts, fname, batch_size, 10)
+                               neg_wordcts, fname, batch_size, epochs)
         else:
             logger.info("creating the positive model")
             model = poslda.OnlineLDA(vocab2id, K=topic_num, D=doc_num,
                                      alpha=alpha, eta=eta, tau0=tau,
                                      kappa=kappa)
             bounds = model.online_train(pos_wordids, pos_wordcts, fname,
-                                        batch_size, 10)
+                                        batch_size, epochs)
 
         # Plotting bound and perplexity
         plt.plot(bounds)
@@ -162,13 +164,17 @@ if __name__ == '__main__':
                                               len(tau) * len(kappa) *
                                               len(eta) * len(alpha)))
 
-    chunked_pairs = get_chunks(pairs, chunks=(multiprocessing.cpu_count()))
+    chunked_pairs = get_chunks(pairs, chunks=(multiprocessing.cpu_count()-1))
     logger.info("chunked pairs %d" % len(chunked_pairs))
 
     pool = multiprocessing.Pool()
     results = pool.map(ldaworker, zip(chunked_pairs, [args]*len(chunked_pairs)))
     pool.close()
     pool.join()
+
+#export  OMP_NUM_THREADS=1;
+
+
 
 #if batch_flag:
 #            kappa = 0
