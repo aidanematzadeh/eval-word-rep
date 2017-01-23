@@ -73,7 +73,7 @@ class OnlineLDA:
         self._expElogbeta = n.exp(self._Elogbeta)
 
         # TODO Added this as a global parameter
-        self._gamma = 1 * n.random.gamma(100., 1./100., (self._W, self._K))
+        self._gamma = 1 * n.random.gamma(100., 1./100., (self._D, self._K))
 
     def do_e_step(self, wordids, wordcts, batchdocs):
         batchD = len(wordids)
