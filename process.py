@@ -149,41 +149,33 @@ def get_w2v(w2vcos_pickle, w2vcond_pickle,
     return w2v_cos, w2v_cond
 
 
-
-def get_tsg(tsg_path, norms=None, vocab_path=None,
-            lambda_path=None, gamma_path=None, mu_path=None):
-    """ Get the cond prob for word representations learned by
-    Hoffman-VBLDA-based code.
-    Calculate p(target|cue) = sum_topics{p(target|topic) p(topic|cue)}
-    p(topic|cue) = theta_cue[topic] because document is the cue
-    vocab_path: the word2id mappings
+def condprob_gsteq8(norms, word2id, topics):
     """
+    Griffiths et al eq 8
+    p(w2|w1) = sum_z p(w2|z)p(z|w1), p(z|w1) = p(w1|z)p(z)/p(w1)
+    """
+    condprob = {}
+    for cue in norms:
+        if cue not in word2id.keys():
+            continue
+        if cue not in condprob:
+            condprob[cue] = {}
+        cueid = word2id[cue]
+        # Calculate the cond prob for all the targets given the cue, and
+        # also all the possible cues
+        targetlist = set(list(norms[cue].keys()) + list(norms.keys()))
+        for target in targetlist:
+            if target not in word2id.keys():
+                continue
+            targetid = word2id[target]
+            # p(w1) = sum_z p(w1|z)
+            target_prob =  np.sum(topics[:, targetid])
+            condprob[cue][target] = np.dot(topics[:, cueid], topics[:, targetid]) \
+            / target_prob
 
-    if os.path.exists(tsg_path):
-        return load_scores(tsg_path)
+    return condprob
 
-    word2id, id2word = read_tsgvocab(vocab_path)
-
-    # Getting the topic-word probs -- p(topic|cue)
-    topics = np.loadtxt(lambda_path)
-    num_topics = topics.shape[0]
-    print("number of topics %d" % num_topics)
-    print("lambda", topics.shape)
-
-    # Normalize the topic-word probs
-    if mu_path is None:
-        for k in range(num_topics):
-            topics[k] = topics[k] / sum(topics[k])
-    else:
-        mu = (np.loadtxt(mu_path))
-        for k in range(num_topics):
-            denom = topics[k] + mu[k]
-            topics[k] = topics[k] / denom
-            assert sum(topics[k] + (mu[k] / denom)) == len(word2id)
-
-    gamma = np.loadtxt(gamma_path)
-    print("gamma", gamma.shape)
-
+def condprob_nmgeq4(norms, word2id, topics, gamma):
     condprob = {}
     for cue in norms:
         if cue not in word2id.keys():
@@ -200,12 +192,50 @@ def get_tsg(tsg_path, norms=None, vocab_path=None,
         for target in targetlist:
             if target not in word2id.keys():
                 continue
-            if target not in condprob[cue]:
-                condprob[cue][target] = 0
             targetid = word2id[target]
+            condprob[cue][target] = np.dot(cue_topics_dist, topics[:, targetid])
+    return condprob
+
+
+def get_tsg(tsg_path, cond_eq, norms=None, vocab_path=None,
+            lambda_path=None, gamma_path=None, mu_path=None):
+    """ Get the cond prob for word representations learned by
+    Hoffman-VBLDA-based code.
+    Calculate p(target|cue) = sum_topics{p(target|topic) p(topic|cue)}
+    p(topic|cue) = theta_cue[topic] because document is the cue
+    vocab_path: the word2id mappings
+    """
+
+    if os.path.exists(tsg_path):
+        return load_scores(tsg_path)
+
+    word2id, id2word = read_tsgvocab(vocab_path)
+
+    # Getting the topic-word probs -- p(w|topic)
+    topics = np.loadtxt(lambda_path)
+    print("lambda", topics.shape)
+    num_topics = topics.shape[0]
+
+    # p(w2|w1) = sum_z p(w2|z)p(z|w1), p(z|w1) = p(w1|z)(z)/p(w1)
+    if cond_eq == "gst-eq8":
+       condprob = condprob_gsteq8(norms, word2id, topics)
+
+    if cond_eq == "nmg-eq4":
+        gamma = np.loadtxt(gamma_path)  # p(topic|doc)
+#        print("number of topics %d gamma %d lambda %d" % (num_topics, gamma.shape, topics.shape))
+        print("gamma", gamma.shape)
+
+        # Normalize the topic-word probs
+        if mu_path is None:
             for k in range(num_topics):
-                condprob[cue][target] += topics[k][targetid] *\
-                    cue_topics_dist[k]
+                topics[k] = topics[k] / sum(topics[k])
+        else:
+            mu = (np.loadtxt(mu_path))
+            for k in range(num_topics):
+                denom = topics[k] + mu[k]
+                topics[k] = topics[k] / denom
+
+        condprob = condprob_nmgeq4(norms, word2id, topics, gamma)
 
     with open(tsg_path, 'wb') as output:
         pickle.dump(condprob, output)
@@ -268,7 +298,7 @@ def get_tsgfreq(tsgfreq_path, norms=None, vocab_path=None,
             if target not in word2id.keys():
                 continue
             if target not in tsgfreq[cue].keys():
-                tsgfreq[cue][target] = 0
+                tsgfreq[cue][target] = 1
     with open(tsgfreq_path, 'wb') as output:
         pickle.dump(tsgfreq, output)
 
@@ -357,6 +387,7 @@ def get_tuples(norms, allpairs):
                     tuples.append((w1, w2, w3))
     return tuples
 
+
 def get_glove(glovecos_pickle, glovecond_pickle, glove_path,
             norms=None):
     """ Load (Gensim) Word2Vec representations for words in norms and popluate
@@ -417,6 +448,10 @@ def get_glove(glovecos_pickle, glovecond_pickle, glove_path,
           (len(glove_cos), len(norms), len(glove_cond)))
 
     return glove_cos, glove_cond
+
+
+
+
 
 # TODO need to rewrite
 def read_gensimlda(ldapath, norm2doc_path, corpus_path, norms, word_list):
