@@ -80,6 +80,9 @@ class OnlineLDA:
         # Initialize the variational distribution q(theta|gamma) for
         # the mini-batch
         gamma = self._gamma[batchdocs]
+        # Advanced indexing always returns a copy of the data
+        # (contrast with basic slicing that returns a view).
+
         Elogtheta = dirichlet_expectation(gamma)
         expElogtheta = n.exp(Elogtheta)
 
@@ -125,6 +128,10 @@ class OnlineLDA:
         # sstats[k, w] = \sum_d n_{dw} * phi_{dwk}
         # = \sum_d n_{dw} * exp{Elogtheta_{dk} + Elogbeta_{kw}} / phinorm_{dw}.
         sstats = sstats * self._expElogbeta
+
+        # Copy the new gamma back to the main _gamma
+        self._gamma[batchdocs] = gamma
+
 
         return((gamma, sstats))
 
