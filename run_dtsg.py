@@ -56,7 +56,7 @@ def ldaworker(arguments):
     # assert(len(pos_wordids[0]) == len(pos_wordcts[0]))
 
     for topic_num, batch_size, tau, kappa, eta, alpha in pairs:
-        fname = "topics-%d-bsize-%d-tau-%f-kappa-%f-eta-%f-alpha-%f" %\
+        fname = "topics-%d-bsize-%d-tau-%f-kappa-%f-eta-%.10f-alpha-%f" %\
              (topic_num, batch_size, tau, kappa, eta, alpha)
         # Number of documents
         doc_num = len(pos_wordids)
@@ -150,21 +150,23 @@ if __name__ == '__main__':
 
 
     # Parameter search
-    topic_num = [100, 200, 300, 500]  # numpy.arange(20, 100, 20)
-    batch_size = [512]  # [1, 4, 16, 64, 256, 512]
+    topic_num = [1600]#[300, 500] # [100, 200, 300]#[100, 200]#, 300, 500]  # numpy.arange(20, 100, 20)
+    batch_size = [512]#[512, 1024]#[512]  # [1, 4, 16, 64, 256, 512]
 
     tau = [1]  # [1, 4, 16, 64, 256, 512]
     kappa = [0.5]  # numpy.arange(0.5, 1, 0.1)
 
-    eta = [0.001, 0.0001, 0.000001]
-    alpha = [0.01, 0.001, 0.000001]
+    eta = [0.01]#[0.01, 0.00001] #[0.01, 0.0001, 0.0000001] #[0.01, 0.001, 0.0001, 0.000001, 0.00000001]
+    alpha = [0.031]#[0.1, 0.01] #[0.01] #[0.1, 0.01, 0.001, 0.000001]
+    #try 1
+    # small number of topics2
 
     pairs = itertools.product(topic_num, batch_size, tau, kappa, eta, alpha)
     logger.info("number of parameters: %d" % (len(topic_num) * len(batch_size) *
                                               len(tau) * len(kappa) *
                                               len(eta) * len(alpha)))
 
-    chunked_pairs = get_chunks(pairs, chunks=(multiprocessing.cpu_count()-1))
+    chunked_pairs = get_chunks(pairs, chunks=(multiprocessing.cpu_count()-8))
     logger.info("chunked pairs %d" % len(chunked_pairs))
 
     pool = multiprocessing.Pool()
