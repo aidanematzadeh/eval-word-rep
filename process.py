@@ -46,17 +46,19 @@ def get_norms(norms_pickle, norms_path=None):
     if os.path.exists(norms_pickle):
         return load_scores(norms_pickle)
 
-    # The value of zero means that the norms[cue][target] does not exist.
     norms = {}
     for filename in os.listdir(norms_path):
-        normfile = codecs.open(norms_path + "/" + filename, 'r', encoding="ISO-8859-1")
+        normfile = codecs.open(norms_path + "/" + filename, 'r',
+                               encoding="ISO-8859-1")
         normfile.readline()
         for line in normfile:
             nodes = line.strip().split(',')
             cue = nodes[0].strip().lower()
             target = nodes[1].strip().lower()
+
             if cue not in norms:
                 norms[cue] = {}
+
             norms[cue][target] = float(nodes[5])  # FSG, p(target|cue)
 
     with open(norms_pickle, 'wb') as output:
@@ -154,6 +156,9 @@ def condprob_gsteq8(norms, word2id, topics):
     Griffiths et al eq 8
     p(w2|w1) = sum_z p(w2|z)p(z|w1), p(z|w1) = p(w1|z)p(z)/p(w1)
     """
+    # p(target|cue) = sum_z p(target|z)p(z|cue),
+    # p(z|cue) = p(cue|z)(z)/p(cue)
+
     condprob = {}
     for cue in norms:
         if cue not in word2id.keys():
@@ -161,21 +166,31 @@ def condprob_gsteq8(norms, word2id, topics):
         if cue not in condprob:
             condprob[cue] = {}
         cueid = word2id[cue]
+
+        # p(cue) = sum_z p(cue|z)
+        cue_prob = np.sum(topics[:, cueid])
+
         # Calculate the cond prob for all the targets given the cue, and
         # also all the possible cues
         targetlist = set(list(norms[cue].keys()) + list(norms.keys()))
         for target in targetlist:
             if target not in word2id.keys():
                 continue
+
             targetid = word2id[target]
-            # p(w1) = sum_z p(w1|z)
-            target_prob =  np.sum(topics[:, targetid])
-            condprob[cue][target] = np.dot(topics[:, cueid], topics[:, targetid]) \
-            / target_prob
+            condprob[cue][target] = np.dot(topics[:, cueid], topics[:, targetid])/cue_prob
+
+            #if target in norms[cue]:
+            #    print("cue %s target %s norms %.3f condprob %.10f dotprod %.10f cueprob %.3f" % \
+            #        (cue, target, norms[cue][target], condprob[cue][target],  np.dot(topics[:, cueid], topics[:, targetid]), cue_prob))
 
     return condprob
 
 def condprob_nmgeq4(norms, word2id, topics, gamma):
+    """
+        p(target|cue) = sum_z p(target|z)p(z|cue)
+    """
+
     condprob = {}
     for cue in norms:
         if cue not in word2id.keys():
@@ -196,13 +211,155 @@ def condprob_nmgeq4(norms, word2id, topics, gamma):
             condprob[cue][target] = np.dot(cue_topics_dist, topics[:, targetid])
     return condprob
 
+# Average over samples for gibbs tsg
 
+def get_gibbstsg_avg(gibbstsg_path, beta=0.01, alpha=0.03, norms=None,
+                     vocab_path=None, lambda_path=None, gamma_path=None):
+    """ Get the cond prob for word representations learned by
+    Gibbs sampler code.
+    vocab_path: the word2id mappings
+    """
+
+    if os.path.exists(gibbstsg_path):
+        return load_scores(gibbstsg_path)
+
+    word2id, id2word = read_tsgvocab(vocab_path)
+    # Getting the topic-word probs -- p(w|topic)
+    condprobs = {}
+    for filename in os.listdir(lambda_path):
+        print(filename)
+        topics = np.loadtxt(lambda_path+filename).T + beta
+        #scipy.io.loadmat(lambda_path+filename)['wp'].todense().T + beta
+        topics = np.asarray(topics)  # np.loadtxt(lambda_path).T + beta
+        print("lambda", topics.shape)
+        num_topics = topics.shape[0]
+        for k in range(num_topics):
+            topics[k] = topics[k] / sum(topics[k])
+
+        # p(topic|doc)
+        gamma = np.loadtxt(gamma_path + filename.replace("wp","dp")) + alpha
+
+        # scipy.io.loadmat(gamma_path + filename.replace("wp","dp"))['dp'].todense().T + alpha
+        print("gamma", gamma.shape)
+
+        condprobs[filename] = condprob_nmgeq4(norms, word2id, topics, gamma)
+
+    avg_condprob = {}
+    for filename in condprobs:
+        for cue in condprobs[filename]:
+            if cue not in avg_condprob:
+                avg_condprob[cue] = {}
+            for target in condprobs[filename][cue]:
+                if target not in avg_condprob[cue]:
+                    avg_condprob[cue][target] = 0
+                avg_condprob[cue][target] += condprobs[filename][cue][target]
+
+    for cue in avg_condprob:
+        for target in avg_condprob[cue]:
+            avg_condprob[cue][target] /= len(condprobs.keys())
+
+
+    with open(gibbstsg_path, 'wb') as output:
+        pickle.dump(avg_condprob, output)
+
+    return avg_condprob
+
+
+
+
+
+def get_gibbslda_avg(gibbslda_path, beta=0.01, norms=None, vocab_path=None,
+            lambda_path=None):
+    """ Get the cond prob for word representations learned by
+    Gibbs sampler code.
+    vocab_path: the word2id mappings
+    """
+
+    if os.path.exists(gibbslda_path):
+        return load_scores(gibbslda_path)
+
+    word2id, id2word = read_tsgvocab(vocab_path)
+
+    # Getting the topic-word probs -- p(w|topic)
+
+    condprobs = {}
+    count = 0
+    for filename in os.listdir(lambda_path):
+        print(filename)
+        topics = scipy.io.loadmat(lambda_path+filename)['wp'].todense().T + beta
+        topics = np.asarray(topics)  # np.loadtxt(lambda_path).T + beta
+        print("lambda", topics.shape)
+        num_topics = topics.shape[0]
+
+        # p(target|cue) = sum_z p(target|z)p(z|cue),
+        # p(z|cue) = p(cue|z)(z)/p(cue)
+
+        for k in range(num_topics):
+            topics[k] = topics[k] / sum(topics[k])
+        condprobs[filename] = condprob_gsteq8(norms, word2id, topics)
+        count += 1
+
+    avg_condprob = {}
+    for filename in condprobs:
+        for cue in condprobs[filename]:
+            if cue not in avg_condprob:
+                avg_condprob[cue] = {}
+            for target in condprobs[filename][cue]:
+                if target not in avg_condprob[cue]:
+                    avg_condprob[cue][target] = 0
+                avg_condprob[cue][target] += condprobs[filename][cue][target]
+
+    for cue in avg_condprob:
+        for target in avg_condprob[cue]:
+            avg_condprob[cue][target] /= len(condprobs.keys())
+
+
+    with open(gibbslda_path, 'wb') as output:
+        pickle.dump(avg_condprob, output)
+
+    return avg_condprob
+
+
+
+
+def get_gibbslda(gibbslda_path, beta=0.01, norms=None, vocab_path=None,
+            lambda_path=None):
+    """ Get the cond prob for word representations learned by
+    Gibbs sampler code.
+    vocab_path: the word2id mappings
+    """
+
+    if os.path.exists(gibbslda_path):
+        return load_scores(gibbslda_path)
+
+    #TODO need to change 1-->0?
+    word2id, id2word = read_tsgvocab(vocab_path)
+
+    # Getting the topic-word probs -- p(w|topic)
+    # import scipy.io
+    # topics = scipy.io.loadmat(lambda_path)['wp'].T + beta
+    topics = np.loadtxt(lambda_path).T + beta
+    print("lambda", topics.shape)
+    num_topics = topics.shape[0]
+
+    # p(target|cue) = sum_z p(target|z)p(z|cue),
+    # p(z|cue) = p(cue|z)(z)/p(cue)
+
+    for k in range(num_topics):
+        topics[k] = topics[k] / sum(topics[k])
+    condprob = condprob_gsteq8(norms, word2id, topics)
+
+
+    with open(gibbslda_path, 'wb') as output:
+        pickle.dump(condprob, output)
+
+    return condprob
+
+# get vb tsg or lda
 def get_tsg(tsg_path, cond_eq, norms=None, vocab_path=None,
             lambda_path=None, gamma_path=None, mu_path=None):
     """ Get the cond prob for word representations learned by
     Hoffman-VBLDA-based code.
-    Calculate p(target|cue) = sum_topics{p(target|topic) p(topic|cue)}
-    p(topic|cue) = theta_cue[topic] because document is the cue
     vocab_path: the word2id mappings
     """
 
@@ -216,13 +373,16 @@ def get_tsg(tsg_path, cond_eq, norms=None, vocab_path=None,
     print("lambda", topics.shape)
     num_topics = topics.shape[0]
 
-    # p(w2|w1) = sum_z p(w2|z)p(z|w1), p(z|w1) = p(w1|z)(z)/p(w1)
+    # p(target|cue) = sum_z p(target|z)p(z|cue),
+    # p(z|cue) = p(cue|z)(z)/p(cue)
+
     if cond_eq == "gst-eq8":
-       condprob = condprob_gsteq8(norms, word2id, topics)
+        for k in range(num_topics):
+            topics[k] = topics[k] / sum(topics[k])
+        condprob = condprob_gsteq8(norms, word2id, topics)
 
     if cond_eq == "nmg-eq4":
         gamma = np.loadtxt(gamma_path)  # p(topic|doc)
-#        print("number of topics %d gamma %d lambda %d" % (num_topics, gamma.shape, topics.shape))
         print("gamma", gamma.shape)
 
         # Normalize the topic-word probs
@@ -234,6 +394,9 @@ def get_tsg(tsg_path, cond_eq, norms=None, vocab_path=None,
             for k in range(num_topics):
                 denom = topics[k] + mu[k]
                 topics[k] = topics[k] / denom
+
+        # Calculate p(target|cue) = sum_topics{p(target|topic) p(topic|cue)}
+        # p(topic|cue) = theta_cue[topic] because document is the cue
 
         condprob = condprob_nmgeq4(norms, word2id, topics, gamma)
 
@@ -290,7 +453,7 @@ def get_tsgfreq(tsgfreq_path, norms=None, vocab_path=None,
             target = id2word[targetid]
             if target not in targetlist:
                 continue
-            tsgfreq[cue][target] = targetcount
+            tsgfreq[cue][target] = float(targetcount)
 
         # TODO some of the targets do not happen in the document,
         # their freq is zero.
@@ -298,7 +461,8 @@ def get_tsgfreq(tsgfreq_path, norms=None, vocab_path=None,
             if target not in word2id.keys():
                 continue
             if target not in tsgfreq[cue].keys():
-                tsgfreq[cue][target] = 1
+                tsgfreq[cue][target] = 0.5
+
     with open(tsgfreq_path, 'wb') as output:
         pickle.dump(tsgfreq, output)
 
@@ -306,7 +470,8 @@ def get_tsgfreq(tsgfreq_path, norms=None, vocab_path=None,
 
 
 
-def get_allpairs(allpairs_pickle, norms, cbow=None, sg=None, lda=None, glove=None):
+def get_allpairs(allpairs_pickle, norms, cbow=None, sg=None, tsg=None,
+                 glove=None, gibbslda=None):
     """ Get all cue-target pairs that occur in all of our evaluation sets, that is,
     Nelson norms, cbow, and LDA.
     """
@@ -325,13 +490,21 @@ def get_allpairs(allpairs_pickle, norms, cbow=None, sg=None, lda=None, glove=Non
                     ((cue not in sg) or (target not in sg[cue])):
                 continue
 
-            if (lda is not None) and\
-                    ((cue not in lda) or (target not in lda[cue])):
+            if (tsg is not None) and\
+                    ((cue not in tsg) or (target not in tsg[cue])):
                 continue
 
             if (glove is not None) and\
                     ((cue not in glove) or (target not in glove[cue])):
                 continue
+
+            if (gibbslda is not None) and\
+                    ((cue not in gibbslda) or (target not in gibbslda[cue])):
+                continue
+
+            if (cue not in tsg) or (target not in tsg[cue]):
+                print(cue, target)
+
 
             allpairs.append((cue, target))
 
