@@ -35,10 +35,15 @@ if __name__ == "__main__":
     argparser.add_argument("--sg_path", type=str, default=None, help="Input skipgram model.")
     argparser.add_argument("--sgcond_eq", type=str, default=None, help="Which equation should be used to compute the conditional probability?")
     #
-    argparser.add_argument("--tsg_vocabpath", type=str, help="Input TSG word2id")
-    argparser.add_argument("--tsg_countspath", type=str, help="Input TSG POS counts")
-    argparser.add_argument("--tsg_idspath", type=str, help="Input TSG POS ids")
-    argparser.add_argument("--tsgfreq_pickle", type=str, help="Input TSG freq pickle.")
+    argparser.add_argument("--tsg_wikivocabpath", type=str, help="Input TSG word2id")
+    argparser.add_argument("--tsg_wikicountspath", type=str, help="Input TSG POS counts")
+    argparser.add_argument("--tsg_wikiidspath", type=str, help="Input TSG POS ids")
+    argparser.add_argument("--tsgwikifreq_pickle", type=str, help="Input TSG freq pickle.")
+    #
+    argparser.add_argument("--tsg_tasavocabpath", type=str, help="Input TSG word2id")
+    argparser.add_argument("--tsg_tasacountspath", type=str, help="Input TSG POS counts")
+    argparser.add_argument("--tsg_tasaidspath", type=str, help="Input TSG POS ids")
+    argparser.add_argument("--tsgtasafreq_pickle", type=str, help="Input TSG freq pickle.")
     #
     argparser.add_argument("--tsgpos_pickle", type=str, help="Input TSGPOS cond prob pickle.")
     argparser.add_argument("--tsgpos_gammapath", type=str, help="Input TSGPOS gamma.")
@@ -49,6 +54,16 @@ if __name__ == "__main__":
     argparser.add_argument("--tsgneg_gammapath", type=str, help="Input TSGNEG gamma.")
     argparser.add_argument("--tsgneg_lambdapath", type=str, help="Input TSGNEG lambda.")
     argparser.add_argument("--tsgneg_mupath", type=str, help="Input TSGNEG mu.")
+    #
+    argparser.add_argument("--ldagibbs_pickle", type=str, help="Input lda score pickle file.")
+    argparser.add_argument("--ldagibbs_lambdapath", type=str, default=None, help="Input lambda.")
+    argparser.add_argument("--ldagibbs_vocabpath", type=str, default=None, help="")
+    #
+    #
+    argparser.add_argument("--tsggibbs_pickle", type=str, help="Input TSGPOS cond prob pickle.")
+    argparser.add_argument("--tsggibbs_gammapath", type=str, help="Input TSGPOS gamma.")
+    argparser.add_argument("--tsggibbs_lambdapath", type=str, help="Input TSGPOS lambda.")
+    #
     #
     argparser.add_argument("--glovecos_pickle", type=str, help="Input GloVe cosine score pickle file.")
     argparser.add_argument("--glovecond_pickle", type=str, help="Input GloVe cond prob pickle file.")
@@ -61,45 +76,80 @@ if __name__ == "__main__":
     # Getting different score files
     norms = process.get_norms(args.norms_pickle, args.norms_dirpath)
 
-    cbow_cos, cbow_cond = process.get_w2v(args.cbowcos_pickle,
-                                          args.cbowcond_pickle,
-                                          norms, args.cbow_binarypath, True,
-                                          args.cbowcond_eq)
+    #cbow_cos, cbow_cond = process.get_w2v(args.cbowcos_pickle,
+    #                                      args.cbowcond_pickle,
+    #                                      norms, args.cbow_binarypath, True,
+    #                                      args.cbowcond_eq)
 
-    sg_cos, sg_cond = process.get_w2v(args.sgcos_pickle,
-                                      args.sgcond_pickle,
-                                      norms, args.sg_path, False,
-                                      args.sgcond_eq)
+    #sg_cos, sg_cond = process.get_w2v(args.sgcos_pickle,
+    #                                  args.sgcond_pickle,
+    #                                  norms, args.sg_path, False,
+    #                                  args.sgcond_eq)
 
-    tsg_pos = process.get_tsg(args.tsgpos_pickle, norms, args.tsg_vocabpath,
-                          args.tsgpos_lambdapath, args.tsgpos_gammapath)
+    #sg_cos , sg_cond = cbow_cos, cbow_cond
+    #tsg_pos = process.get_tsg(args.tsgpos_pickle, "nmg-eq4", norms, args.tsg_vocabpath,
+    #                      args.tsgpos_lambdapath, args.tsgpos_gammapath)
 
-    tsg_neg = process.get_tsg(args.tsgneg_pickle, norms, args.tsg_vocabpath,
-                              args.tsgneg_lambdapath, args.tsgneg_gammapath,
-                              args.tsgneg_mupath)
+    #tsg_pos_gst = process.get_tsg(args.tsgpos_pickle.replace(".pickle", "-gst.pickle"),
+    #                          "gst-eq8", norms, args.tsg_vocabpath,
+    #                      args.tsgpos_lambdapath, args.tsgpos_gammapath)
 
-    tsg_neg_norm = process.get_tsg(args.tsgnegnorm_pickle, norms,
-                                   args.tsg_vocabpath, args.tsgneg_lambdapath,
-                                   args.tsgneg_gammapath, None)
 
-    tsg_freq = process.get_tsgfreq(args.tsgfreq_pickle, norms,
-                                   args.tsg_vocabpath, args.tsg_countspath,
-                                   args.tsg_idspath)
+    #tsg_neg = process.get_tsg(args.tsgneg_pickle, norms, args.tsg_vocabpath,
+    #                          args.tsgneg_lambdapath, args.tsgneg_gammapath,
+    #                          args.tsgneg_mupath)
 
-    #for cue in tsg_freq:
-        #assert len(tsg_freq[cue]) == len(tsg_pos[cue])
-    glove_cos, glove_cond =  process.get_glove(args.glovecos_pickle,
-                                               args.glovecond_pickle,
-                                               args.glove_path, norms)
+    #tsg_neg_norm = process.get_tsg(args.tsgnegnorm_pickle, norms,
+    #                               args.tsg_vocabpath, args.tsgneg_lambdapath,
+    #                               args.tsgneg_gammapath, None)
 
+    tsg_wikifreq = process.get_tsgfreq(args.tsgwikifreq_pickle, norms,
+                                   args.tsg_wikivocabpath, args.tsg_wikicountspath,
+                                   args.tsg_wikiidspath)
+
+    tsg_tasafreq = process.get_tsgfreq(args.tsgtasafreq_pickle, norms,
+                                   args.tsg_tasavocabpath, args.tsg_tasacountspath,
+                                   args.tsg_tasaidspath)
+
+
+
+
+    gibbstsg = process.get_gibbstsg_avg(args.tsggibbs_pickle, 0.01, 0.16, norms,
+                                    args.tsg_tasavocabpath,
+                                    args.tsggibbs_lambdapath,
+                                    args.tsggibbs_gammapath)
+
+
+
+    gibbslda = process.get_gibbslda_avg(args.ldagibbs_pickle, 0.01, norms,
+                                    args.ldagibbs_vocabpath,
+                                    args.ldagibbs_lambdapath)
+
+
+
+    #glove_cos, glove_cond =  process.get_glove(args.glovecos_pickle,
+    #                                           args.glovecond_pickle,
+    #                                           args.glove_path, norms)
+
+    #TODO
     # Find the common pairs among the different models
-    allpairs = process.get_allpairs(args.allpairs_pickle, norms, cbow_cos,
-                                    sg_cos, tsg_pos, glove_cos)
+    allpairs = process.get_allpairs(allpairs_pickle=args.allpairs_pickle,
+                                    norms=norms,
+                                    #cbow=cbow_cos,
+                                    tsg=gibbstsg,
+                                    sg=tsg_wikifreq,
+                                    gibbslda=gibbslda)
+                                    # sg_cos, tsg_pos, glove_cos)
     asympairs = process.get_asym_pairs(norms, allpairs)
     print("common pairs: %d, asym pairs: %d" % (len(allpairs), len(asympairs)))
-
-    commonwords = set(tsg_pos.keys()) & set(cbow_cos.keys()) & \
-        set(sg_cos.keys()) & set(glove_cos.keys()) & set(norms.keys())
+    #TODO
+    commonwords = set(norms.keys())
+                 # set(tsg_pos.keys()) & \
+                 #& set(cbow_cos.keys()) &
+                   #set(sg_cos.keys()) &
+    commonwords = commonwords & set(gibbslda.keys()) &\
+                   set(tsg_wikifreq.keys()) & set(gibbstsg.keys())
+    #& set(glove_cos.keys()) &
     print("common cues", len(commonwords))
 
     tuples = process.get_tuples(norms, allpairs)
@@ -107,17 +157,21 @@ if __name__ == "__main__":
 
     # List of models to run the evaluation tasks on
     evallist = [("norms", norms),
-                ("bin-cbow-cond", cbow_cond),
-                ("bin-cbow-cos", cbow_cos),
-                ("sg-cond", sg_cond),
-                ("sg-cos", sg_cos),
-                ("tsg-pos", tsg_pos),
-                ("tsg-neg", tsg_neg),
-                ("tsg-neg-norm", tsg_neg_norm),
-                ("glove-cos", glove_cos),
-                ("glove-cond", glove_cond)]
-
-               # ("tsg-freq", tsg_freq),
+     #           ("bin-cbow-cond", cbow_cond),
+     #           ("bin-cbow-cos", cbow_cos),
+     #           ("glove-cos", glove_cos),
+     #           ("glove-cond", glove_cond),
+     #           ("sg-cond", sg_cond),
+     #           ("sg-cos", sg_cos),
+     #           ("tsg-pos", tsg_pos),
+     #           ("tsg-pos-gsteq8", tsg_pos_gst),
+     #           ("tsg-neg", tsg_neg),
+     #           ("tsg-neg-norm", tsg_neg_norm),
+                ("tsg-wikifreq", tsg_wikifreq),
+                ("tsg-tasafreq", tsg_tasafreq),
+                ("gibbslda", gibbslda),
+                ("gibbstsg", gibbstsg),
+                ]
 
     print("Asymmetries")
     asyms = {} #defaultdict(lambda: defaultdict(list))
@@ -127,9 +181,9 @@ if __name__ == "__main__":
         if stype.endswith("cos"): continue
         asyms["ratio"][stype], asyms["difference"][stype] = evaluate.asymmetry(scores, asympairs)
         #print(sorted(asyms["ratio"][stype], reverse=True)[1:10])
-        for index in range(len(asympairs)):
-            if asyms["ratio"]["norms"][index] > 30 and (asyms["ratio"][stype][index] < 1):
-                print(asympairs[index], asyms["ratio"]["norms"][index], asyms["ratio"][stype][index])
+        #for index in range(len(asympairs)):
+        #    if asyms["ratio"]["norms"][index] > 30 and (asyms["ratio"][stype][index] < 1):
+        #        print(asympairs[index], asyms["ratio"]["norms"][index], asyms["ratio"][stype][index])
 
     for b in asyms:
         if b == "difference": continue
@@ -139,6 +193,7 @@ if __name__ == "__main__":
 
     assocs = {} #defaultdict(lambda: defaultdict(list))
     for stype, scores in evallist:
+        print(stype)
         assocs[stype] = process.get_pair_scores(scores, allpairs)
 
     print("Associations")
@@ -150,6 +205,7 @@ if __name__ == "__main__":
     print("Median Rank")
     gold_associates = evaluate.sort_pairs(norms, allpairs)
 
+    '''
     for stype, scores in evallist:
         scores_sorted = evaluate.sort_pairs(scores, allpairs)
         print(stype)
@@ -158,12 +214,7 @@ if __name__ == "__main__":
             print("median rank associate %d: %.2f, median max rank: %.2f" %\
                     (rank+1, np.median(ranks[rank]), np.median(maxranks[rank])))
         print
-        count = 0
-        for cue in scores_sorted:
-            print(stype, cue, scores_sorted[cue][:2], "gold", gold_associates[cue][:2])
-            if count > 4: break
-            count += 1
-
+    '''
 
     for stype, scores in evallist[1:]:
         scores_sorted = evaluate.sort_all(scores, norms, commonwords)
@@ -172,15 +223,23 @@ if __name__ == "__main__":
         for rank in ranks:
             print("median rank associate %d: %.2f, median max rank: %.2f" %\
                     (rank+1, np.median(ranks[rank]), np.median(maxranks[rank])))
-        print
-        count = 0
+        zero_count, all_count = 0, 0
         for cue in scores_sorted:
-            print(stype, cue, scores_sorted[cue][:2], "gold", gold_associates[cue][:2])
-            for index,(c,v) in enumerate(scores_sorted[cue]):
-                if gold_associates[cue][0][0]==c:
-                    print(index, c,v)
-            if count > 4: break
-            count += 1
+            if cue not in gold_associates:
+                continue
+            if all_count < 4:
+                print(stype, cue, scores_sorted[cue][:3], "\ngold", gold_associates[cue][:3])
+            for index, (t, v) in enumerate(scores_sorted[cue]):
+                if gold_associates[cue][0][0] == t:
+                    if index == 0:
+                        zero_count += 1
+                        break
+            all_count +=1
+        print("zero %d all %d ratio %.2f" % (zero_count, all_count, zero_count/all_count))
+        print()
+                    #print(index, t ,v)
+            #if count > 3: break
+            #count += 1
 
 
 
@@ -190,7 +249,7 @@ if __name__ == "__main__":
 
     te["ratio"], te["difference"] = {}, {}
     for stype, scores in evallist:
-
+        print(stype)
         te_dist, te["ratio"][stype], te["difference"][stype] = evaluate.traingle_inequality_threshold(tuples, scores, commonwords)
         evaluate.plot_traingle_inequality(te_dist, args.outdir + stype + "_")
     for b in te:
