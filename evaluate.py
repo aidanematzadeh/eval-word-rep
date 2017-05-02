@@ -4,31 +4,49 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import operator
 import numpy
-
+import itertools
 
 def rank_correlation(list1, list2):
     """
-    Calculate the ranked correlation between items that between the two list of scores.
+    Calculate the ranked correlation between items that between the two list of
+    scores.
     """
     return scipy.stats.spearmanr(list1, list2)
 
+
 def asymmetry(scores, pairs):
     """
-    Find the ratio of p(w1|w2)/p(w2|w1) and p(w1|w2)-p(w2|w1) for each pair in pairs.
+    Find the ratio of p(w1|w2)/p(w2|w1) and p(w1|w2)-p(w2|w1) for each pair
+    in pairs.
     """
     ratios = []
     differences = []
     for cue, target in pairs:
         differences.append(scores[cue][target] - scores[target][cue])
         try:
-            ratios.append(scores[cue][target]  / scores[target][cue])
+            ratios.append(scores[cue][target] / scores[target][cue])
         except ZeroDivisionError:
             print(ZeroDivisionError)
             ratios.append(float('inf'))
     return ratios, differences
 
-#TODO
-def traingle_inequality_threshold(tuples, scores, common_words, thresholds=None):
+
+def threshold2number(tuples, scores, thresholds):
+    """
+    Find the number of pairs that are above the threshold.
+    """
+    thresh2num = {}
+    for t in thresholds:
+        thresh2num[t] = 0
+
+    for w1, w2, w3 in tuples:
+        for t in thresholds:
+            if scores[w1][w2] > t and scores[w2][w3] > t:
+                thresh2num[t] += 1
+    return thresh2num
+
+
+def traingle_inequality_threshold(stype, tuples, scores):
     """
     Find the pairs such that P(w2|w1) and P(w3|w2) are greater than the threshold;
     plot the distribution of P(w3|w1).
@@ -42,61 +60,123 @@ def traingle_inequality_threshold(tuples, scores, common_words, thresholds=None)
 
     """
     values = []
-    for cue in scores:
-        if cue in common_words:
-            values += list(scores[cue].values())
+    for w1, w2, w3 in tuples:
+        values.append(min(scores[w1][w2], scores[w2][w3]))
+        #values.append(scores[w2][w3])
+        #values.append(scores[w1][w3])
 
-    thresholds = [numpy.percentile(values, 97)]
-    thresholds.append(numpy.percentile(values, 95))
-    thresholds.append(numpy.percentile(values, 93))
-    thresholds.append(numpy.percentile(values, 91))
-    #print("------", thresholds)
+    values = sorted(values, reverse=True)
+    print(stype, len(values))
 
-    prob_dist_thresh = {}
-    differences, ratios = [] , []
+
+    min_value = numpy.min(values)
+    # Finding a threshold such that the number of pairs greater than that
+    # threshold are similar to norms
+    thresholds = []
+    thresholds.append(numpy.percentile(values, 99.99))
+    thresholds.append(numpy.percentile(values, 99.94))
+
+    thresholds.append(numpy.percentile(values, 99.8))
+    thresholds.append(numpy.percentile(values, 99.5))
+    thresholds.append(numpy.percentile(values, 99.1))
+    thresholds.append(numpy.percentile(values, 98.5))
+
+
+    #thresholds.append(numpy.percentile(values, 96))
+    #thresholds.append(numpy.percentile(values, 94))
+    #thresholds.append(numpy.percentile(values, 92))
+
+    #if stype != "norms":
+        #for number in norm_thresholds:
+        #    for index in range(len(values)):
+        #        if values[index] != max_value and values[index] not in thresholds\
+        #                and len(values[0:index]) >= number:
+        #            thresholds.append(values[index])
+        #            break
+    #else:
+    #    thresholds = norm_thresholds
+
+
+
+    thresholds.append(min_value)
+    thresholds = sorted(thresholds)
+    print(stype + " thresholds: ", thresholds)
+
+    prob_dist_thresh, ratios = {} , {}
     for t in thresholds:
-        prob_dist_thresh[t] = []
+        prob_dist_thresh[t], ratios[t] = [], []
+
 
     for w1, w2, w3 in tuples:
-        # TODO: this can be done more efficiently, not need to do this for all the thresholds
         for t in thresholds:
-            if scores[w1][w2] >= t and scores[w2][w3] >= t:
+            if scores[w1][w2] > t and scores[w2][w3] > t:
                 prob_dist_thresh[t].append(scores[w1][w3])
-
-        differences.append(min(scores[w1][w2], scores[w2][w3]) - scores[w1][w3])
-        ratios.append(min(scores[w1][w2], scores[w2][w3]) / scores[w1][w3])
-
-        #print((w1,w2,w3), differences[-1])
-
-    return prob_dist_thresh, ratios, differences
+                ratios[t].append(min(scores[w1][w2], scores[w2][w3]) / scores[w1][w3])
 
 
-def plot_traingle_inequality(dist, name):
-    fig = plt.figure()
-    ax = fig.add_subplot(111)
-    patterns = ('', '+', '*', '\\', '*', 'o', 'O', '.')
 
-    #colormapname = "YlGnBu"
-    index = 0
-    for thres in sorted(dist.keys()):
-        #print(name, thres, len(dist[thres]))
-        ax.hist(dist[thres], label="%.5f" %(thres), hatch = patterns[index])#, color=plt.get_cmap(colormapname))
-        index +=1
-    #ax.set_ylim(0, 10)
-    ax.set_xlim(xmin=0)
-    ax.legend()
-    fig.savefig(name.replace('.',''))
-    #
-    fig = plt.figure()
-    ax = fig.add_subplot(111)
-    index = 0
-    for thres in sorted(dist.keys()):
-        ax.hist(dist[thres], label="%0.5f"% (thres), normed=True, hatch= patterns[index])#, color=plt.get_cmap(colormapname))
-        index += 1
-    ax.set_xlim(xmin=0)
-    ax.legend()
-    fig.savefig(name.replace('.','') + "_normed.png")
+    values = []
+    for w1, w2, w3 in tuples:
+        values.append(scores[w1][w2])
+        values.append(scores[w2][w3])
+        values.append(scores[w1][w3])
 
+    values = sorted(values, reverse=True)
+
+
+
+    return prob_dist_thresh, values, ratios
+
+
+def plot_traingle_inequality(te_dist, sim_dist, name):
+    n = len(te_dist.keys())
+
+    thresholds = sorted(te_dist.keys())
+    xmax = numpy.max(te_dist[thresholds[0]])
+    # plot the triangle inequality distributions
+    for normed_flag in (True, False):
+        plt.clf()
+        plt.subplots_adjust(hspace=1.2)
+        for index, thres in enumerate(thresholds):
+            ax = plt.subplot(n, 1, index+1)
+            plt.hist(te_dist[thres], label="%.5f" % (thres), normed=normed_flag)
+            ax.set_xlim(xmin=0)
+            ax.set_xlim(xmax=xmax)
+            ax.set_title("pairs %d" % len(te_dist[thres]), fontsize=8)
+            plt.legend(prop={'size':8})
+            if index != len(thresholds) - 1:
+                plt.setp(ax.get_xticklabels(), visible=False)
+
+        plt.savefig("%s_%d.png"% (name, normed_flag))
+
+    # plot the histogram of the similarity values
+    plt.clf()
+    plt.hist(sim_dist, label=name)
+    #ax.set_xlim(xmin=0)
+    plt.title('Number of pairs %d' % len(sim_dist))
+    plt.legend(prop={'size':8})
+    plt.savefig("%s_pairs.png" % name)
+
+def plot_percentile_rank(te_data, filename):
+    plt.clf()
+    plt.xscale('log')
+    plt.gca().invert_xaxis()
+
+    marker = itertools.cycle(('>', '+', '.', 'o', '*'))
+    for stype, te_dist, sim_dist in te_data:
+        #if 'tasa' not in stype: continue
+        x, y ,z = [], [], []
+        for t in sorted(te_dist.keys())[1:]:
+            min_value = numpy.min(te_dist[t])
+            x.append(len(te_dist[t]))
+            y.append(scipy.stats.percentileofscore(sim_dist, min_value, kind='rank'))
+            #y.append(scipy.stats.percentileofscore(te_dist[t], min_value, kind='rank'))
+            z.append(min_value)
+        print(stype, x, y, z)
+        plt.plot(x,y, label=stype, marker=next(marker), linestyle="-")
+
+    plt.legend()
+    plt.savefig(filename)
 
 def sort_pairs(scores, allpairs):
     """ For each key in dictionary, sort the items associated with it """
