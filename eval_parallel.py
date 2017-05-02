@@ -179,9 +179,6 @@ if __name__ == "__main__":
     tuples = process.get_tuples(ctrl['tuples_pickle'], norms, allpairs, regeneratePickle=('tuples' in ctrl['regenerate']))
     print("Number of Triangle Inequality tuples %d" % len(tuples))
 
-    # norm_thresh = [0.15, 0.25, 0.35, 0.45, 0.55, 0.65]
-    # thresh2num = evaluate.threshold2number(tuples, norms, norm_thresh)
-
     gold_associates = evaluate.sort_pairs(norms, allpairs)
 
     print('Running tests')
