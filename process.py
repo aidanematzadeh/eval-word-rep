@@ -1,7 +1,6 @@
 import os
 import gensim
 import numpy as np
-import scipy.io as sio
 import scipy
 import scipy.spatial
 import pickle
@@ -10,11 +9,14 @@ import codecs
 import pandas
 import csv
 import glob
+
 # Reads and process data used in the evaluation.
+
 
 class Glove_model(object):
     def __init__(self, glove_path):
-        self.df = pandas.read_table(glove_path,sep = ' ', index_col=0, encoding='utf-8', quoting=csv.QUOTE_NONE)
+        self.df = pandas.read_table(glove_path,sep = ' ', index_col=0,
+                                    encoding='utf-8', quoting=csv.QUOTE_NONE)
 
         # make this into a faster to access object
         self.activation = {}
@@ -24,11 +26,12 @@ class Glove_model(object):
         self.idx = 0
         self.vocab = set(self.df.index.tolist())
 
-    def similarity(self,word1, word2):
+    def similarity(self, word1, word2):
         vector1 = self.activation[word1]
         vector2 = self.activation[word2]
-        sim = 1 - scipy.spatial.distance.cosine(vector1,vector2)
+        sim = 1 - scipy.spatial.distance.cosine(vector1, vector2)
         return(sim)
+
 
 def load_scores(path):
     """ Loads a pickle file.
@@ -49,7 +52,7 @@ def get_norms(norms_pickle, norms_path=None, regeneratePickle=False):
 
     # The value of zero means that the norms[cue][target] does not exist.
     norms = {}
-    for filename in glob.glob(os.path.join(norms_path,'*.bin')):
+    for filename in glob.glob(os.path.join(norms_path, '*.bin')):
         normfile = codecs.open(filename, 'r', encoding="ISO-8859-1")
         normfile.readline()
         for line in normfile:
@@ -129,7 +132,7 @@ def get_w2v(w2vcos_pickle, w2vcond_pickle,
                 w2v_cond[cue][target] = np.round(np.exp(w2v_cos[cue][target] - p_cue), decimals=6)
 
     elif cond_eq == 'eq4':
-        print('Normalizing to support conditional probability calculations')    
+        print('Normalizing to support conditional probability calculations')
         model.column_normalized = np.apply_along_axis(softmax, axis=0,
                                                   arr=model.syn0)
         model.row_normalized= np.apply_along_axis(softmax, axis=1, arr=model.syn0)
@@ -143,16 +146,16 @@ def get_w2v(w2vcos_pickle, w2vcond_pickle,
                 target_probvec = model.column_normalized[word2id[target], :]
                 w2v_cond[cue][target] = np.round(np.sum(cue_topics_dist * target_probvec), decimals=6)
     else:
-        raise ValuError('Unrecognized equation for conditional probability assessment')                
+        raise ValuError('Unrecognized equation for conditional probability assessment')
 
-    if writePickle: 
-        print('Pickling model scores')            
+    if writePickle:
+        print('Pickling model scores')
         with open(w2vcond_pickle, 'wb') as output:
             pickle.dump(w2v_cond, output)
         with open(w2vcos_pickle, 'wb') as output:
             pickle.dump(w2v_cos, output)
     else:
-        print('Not caching pickles because of size')            
+        print('Not caching pickles because of size')
 
     print("cosine size %d norms size %d cond size %d" %
           (len(w2v_cos), len(norms), len(w2v_cond)))
@@ -240,7 +243,7 @@ def get_gibbslda_avg(gibbslda_pickle, beta=0.01, norms=None, vocab_path=None, la
         condprobs[filename] = condprob_gsteq8(norms, word2id, topics)
         count += 1
 
-    print('Getting conditional probability similiarities')    
+    print('Getting conditional probability similiarities')
     avg_condprob = {}
     for filename in condprobs:
         for cue in condprobs[filename]:
@@ -400,7 +403,7 @@ def get_tsgfreq(tsgfreq_pickle, norms=None, vocab_path=None,
                 continue
             if target not in tsgfreq[cue].keys():
                 tsgfreq[cue][target] = 1
-    
+
     if writePickle:
         with open(tsgfreq_pickle, 'wb') as output:
             pickle.dump(tsgfreq, output)
@@ -458,16 +461,16 @@ def get_allpairs_generalized(allpairs_pickle, norms, models, regeneratePickle=Fa
             normpairs.append((cue, target))
             model_presence = np.array([0 if (cue not in model or target not in model[cue]) else 1 for model in models])
             #print(model_presence)
-            if np.all(model_presence):                    
+            if np.all(model_presence):
                 allpairs.append((cue, target))
             # elif sum(model_presence) == (len(model_presence) -1):
                 #import pdb
-                #pdb.set_trace() 
+                #pdb.set_trace()
             else:
                 #import pdb
                 #pdb.set_trace()
-                print('Missing cue or target!')   
-                print((cue, target))                
+                print('Missing cue or target!')
+                print((cue, target))
 
     print("cues and targets in norms %d" % len(normpairs))
     print("cues and targets in norms and other data %d" % len(allpairs))
@@ -523,7 +526,7 @@ def get_tuples(tuples_pickle, norms, allpairs, regeneratePickle=False, writeTupl
                 if (w1, w3) in allpairs:
                     tuples.append((w1, w2, w3))
 
-    
+
     with open(tuples_pickle, 'wb') as output:
         pickle.dump(tuples, output)
 
@@ -542,7 +545,7 @@ def get_glove(glovecos_pickle, glovecond_pickle, glove_path,
     if os.path.exists(glovecos_pickle) and os.path.exists(glovecond_pickle) and not regeneratePickle:
         print('Existing Glove pickle found...')
         glove_cos = load_scores(glovecos_pickle)
-        glove_cond = load_scores(glovecond_pickle)        
+        glove_cond = load_scores(glovecond_pickle)
         return glove_cos, glove_cond
 
     model =  Glove_model(glove_path)
@@ -551,7 +554,7 @@ def get_glove(glovecos_pickle, glovecond_pickle, glove_path,
     # List of all the norms in the model. Used in normalization of cond prob.
     wordlist = set([])
     # Note that the cosine is the same as dot product for cbow vectors
-    print('Getting cosine similarity')    
+    print('Getting cosine similarity')
     for cue in norms:
         # print('Getting cosine similarity: '+cue)
         if cue not in model.vocab:
@@ -581,7 +584,7 @@ def get_glove(glovecos_pickle, glovecond_pickle, glove_path,
             cue_context.append(model.similarity(cue, w))
         # Using words in the word_list to normalize the prob
         p_cue = scipy.misc.logsumexp(np.asarray(cue_context))
-        for target in glove_cos[cue]:            
+        for target in glove_cos[cue]:
             glove_cond[cue][target] = np.exp(glove_cos[cue][target] - p_cue)
 
     if writePickle:
@@ -595,96 +598,3 @@ def get_glove(glovecos_pickle, glovecond_pickle, glove_path,
           (len(glove_cos), len(norms), len(glove_cond)))
 
     return glove_cos, glove_cond
-
-
-
-
-
-# TODO need to rewrite
-def read_gensimlda(ldapath, norm2doc_path, corpus_path, norms, word_list):
-    """ Calculate p(target|cue) = sum_topics{p(target|topic) p(topic|cue)}
-        p(topic|cue) = theta_cue[topic] because document is the cue
-    """
-    outname = ldapath + ".pickle"
-    if os.path.exists(outname):
-        return load_scores(outname)
-
-    try:
-        lda = gensim.models.LdaModel.load(ldapath)
-    except:
-        with open('/tmp/badfile', 'a') as f:
-            f.write(ldapath + '\n')
-            return None
-    word2id ={}
-    for wordid, word in lda.id2word.items():
-        word2id[word] = wordid
-
-    # Getting the topic-word probs
-    topics =  lda.state.get_lambda()
-    # Normalize the topic-word probs
-    for k in range(lda.num_topics):
-        topics[k] = topics[k]/topics[k].sum()
-
-    # norm_id --> (doc_id, norm_freq)
-    norm2doc = load_scores(norm2doc_path)
-    corpus = gensim.corpora.MmCorpus(corpus_path)
-
-    condprob = {}
-    for cue in norms:
-        if not (cue in word_list): continue
-        if not cue in condprob:
-            condprob[cue] = []
-        # Topic distribution of the document associated with cue
-        doc_id = norm2doc[cue.encode()][0]
-        gamma, _ = lda.inference([corpus[doc_id]])
-        doc_topics_dist = gamma[0] / sum(gamma[0])  # normalize distribution
-
-        for target in norms[cue]:
-            if not (target in word_list): continue
-            targetid = word2id[target]
-            #
-            for k in range(lda.num_topics):
-                condprob[cue][target] +=  topics[k][targetid] * doc_topics_dist[k]
-
-    with open(outname, 'wb') as output:
-        pickle.dump(condprob, output)
-
-    return condprob
-
-
-
-def read_filter_words(filename):
-    """
-    Read the subset of words from Nelson norms that is used in Griffiths et al (2007)
-    """
-
-    filters = sio.loadmat(filename)
-    filters = filters['W'][0].tolist()
-    words = []
-    for f in filters:
-        words.append(f.tolist()[0].lower())
-    return words
-
-def mm2dt(mmcorpus_path, vocab_path):
-    """ Read a mmcorpus file and write it as a doc-term matrix """
-    mmcorpus = gensim.corpora.MmCorpus(mmcorpus_path)
-    id2word = gensim.corpora.Dictionary.load_from_text(vocab_path)
-
-    norm2doc = load_scores(mmcorpus_path + ".norm2doc")
-    n_vocab = len(id2word.keys())
-    n_doc = len(norm2doc.keys())
-    dt = np.zeros((n_doc, n_vocab), dtype=np.intc)
-    #
-    for i in range(len(list(mmcorpus))):
-        for (w, count) in mmcorpus[i]:
-            dt[i, w - 1] = count
-    #
-    vocab = np.zeros(n_vocab, dtype=object)
-    for (wid, word) in id2word.items():
-        vocab[wid] = word
-    #
-    return dt, vocab
-
-
-
-
