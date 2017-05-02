@@ -1,2 +1,3 @@
-# word_representations
-Comparing word representations learned from different models against human behavoir
+# Evaluating Word Representations
+Evaluating word representations (vectors) against human word association data. 
+
