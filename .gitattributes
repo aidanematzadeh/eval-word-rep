@@ -1,1 +1,2 @@
-*.py linguist-language=Python
+data/* linguist-vendored
+*.py linguist-language=python
