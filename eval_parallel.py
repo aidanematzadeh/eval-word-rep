@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 import os
 import numpy as np
 import argparse
@@ -174,7 +176,20 @@ if __name__ == "__main__":
 
     print('Reconciling vocabularies...')
     keys_per_model = [set(x['data'].keys()) for x in evallist]
-    commonwords =  set.intersection(*keys_per_model)
+
+    intersection_store = np.zeros([len(keys_per_model), len(keys_per_model)])
+
+    for i in range(len(keys_per_model)):
+        for j in range(i):
+            intersection_store[i,j] = len(set.intersection(keys_per_model[i], keys_per_model[j]))
+
+
+    idf = pd.DataFrame(intersection_store, index = [x['path'] for x in evallist], columns= [x['path'] for x in evallist])       
+    idf.to_csv(os.path.join(ctrl['resultsPath'],'key_overlap.csv'))
+
+
+
+    commonwords =  set.intersection(*keys_per_model) 
     print("common cues", len(commonwords))
     tuples = process.get_tuples(ctrl['tuples_pickle'], norms, allpairs, regeneratePickle=('tuples' in ctrl['regenerate']))
     print("Number of Triangle Inequality tuples %d" % len(tuples))
