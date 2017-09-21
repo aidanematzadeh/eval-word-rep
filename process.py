@@ -1,8 +1,10 @@
 import os
 import gensim
 import numpy as np
+
 import scipy
 import scipy.spatial
+import scipy.io
 import pickle
 import os.path
 import codecs
@@ -166,7 +168,8 @@ def get_w2v(w2vcos_pickle, w2vcond_pickle,
 def condprob_gsteq8(norms, word2id, topics):
     """
     Griffiths et al eq 8
-    p(w2|w1) = sum_z p(w2|z)p(z|w1), p(z|w1) = p(w1|z)p(z)/p(w1)
+    p(w2|w1) = sum_z p(w2|z)p(z|w1), 
+    p(z|w1) = p(w1|z)p(z)/p(w1)
     """
     condprob = {}
     for cue in norms:
@@ -184,10 +187,15 @@ def condprob_gsteq8(norms, word2id, topics):
             targetid = word2id[target]
             # p(w1) = sum_z p(w1|z)
             target_prob =  np.sum(topics[:, targetid])
-            condprob[cue][target] = np.dot(topics[:, cueid], topics[:, targetid]) \
-            / target_prob
+            condprob[cue][target] = np.dot(topics[:, cueid], topics[:, targetid]) / target_prob
+            
+            # Probability of the topic P(z)
+            condprob[cue][target] /= len(topics[:,cueid]) 
+
+        assert sum(condprob[cue].values()) < 1
 
     return condprob
+
 
 def condprob_nmgeq4(norms, word2id, topics, gamma):
     condprob = {}
