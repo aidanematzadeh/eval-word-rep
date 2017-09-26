@@ -4,12 +4,14 @@
   "resultsDir": "par_eval/results",
   "normsPath": "par_eval/norms",
   "models":[ 
-  			{"path": "tasa-w2v", "type": "w2v", "overwriteCache": 1, "condEq":"eq1", "bin":0},	
+  			{"path": "tasa-cbow", "type": "w2v", "overwriteCache": 1, "condEq":"eq1", "bin":0},	
+        {"path": "tasa-skipgram", "type": "w2v", "overwriteCache": 1, "condEq":"eq1", "bin":0}, 
   			{"path": "tasa-glove", "type": "glove", "overwriteCache": 1, "condEq":"eq1"},
-  			{"path": "googlenews-w2v", "type": "w2v", "overwriteCache": 0, "condEq":"eq1", "bin":1},
+  			{"path": "googlenews-w2v", "type": "w2v", "overwriteCache": 1, "condEq":"eq1", "bin":1},
   			{"path": "tasa-gibbslda", "type": "gibbslda", "overwriteCache": 1, "vocab_path":"ldatasa_word2id", "lambda_path":"lambda/"},
   			{"path": "wiki-freq", "type": "freq", "overwriteCache": 1, "counts_path":"5w_positive_counts", "vocab_path":"5w_word2id", "ids_path":"5w_positive_ids"},
-  			{"path": "wiki-w2v", "type": "w2v", "overwriteCache": 1, "condEq":"eq1", "bin":0},
+  			{"path": "wiki-skipgram", "type": "w2v", "overwriteCache": 1, "condEq":"eq1", "bin":0},
+        {"path": "wiki-cbow", "type": "w2v", "overwriteCache": 1, "condEq":"eq1", "bin":0},
   			{"path": "wiki-glove", "type": "glove", "overwriteCache": 1, "condEq":"eq1"},  			
   			{"path": "pretrained-glove", "type": "glove", "overwriteCache": 1, "condEq":"eq1"}
   			],
