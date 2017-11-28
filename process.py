@@ -180,14 +180,21 @@ def condprob_gsteq8(norms, word2id, topics):
         cueid = word2id[cue]
         # Calculate the cond prob for all the targets given the cue, and
         # also all the possible cues
+        
+        # p(target|cue) = sum_z p(target|z)p(z|cue),
+        # p(z|cue) = p(cue|z)p(z)/p(cue)
+
         targetlist = set(list(norms[cue].keys()) + list(norms.keys()))
         for target in targetlist:
             if target not in word2id.keys():
                 continue
             targetid = word2id[target]
             # p(w1) = sum_z p(w1|z)
-            target_prob =  np.sum(topics[:, targetid])
-            condprob[cue][target] = np.dot(topics[:, cueid], topics[:, targetid]) / target_prob
+            # target_prob =  np.sum(topics[:, targetid])
+            cue_prob = np.sum(topics[:, cueid])
+
+            condprob[cue][target] = np.dot(topics[:, cueid], topics[:, targetid]) / cue_prob
+            #target_prob
             
             # Probability of the topic P(z)
             condprob[cue][target] /= len(topics[:,cueid]) 
