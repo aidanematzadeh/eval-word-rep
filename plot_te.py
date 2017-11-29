@@ -1,6 +1,6 @@
 # This script produces the traingle inequlity plots -- 
 
-import pickle
+import joblib
 import sys
 import os
 import numpy
@@ -20,7 +20,7 @@ for filename in os.listdir(path):
     print(filename)
     name = filename[0:filename.find("_")]
     with open(path + "/" + filename, 'rb') as f:
-        te[name] = pickle.load(f, encoding='latin1')
+        te[name] = joblib.load(f)
 
 models_num = len(te)
 thres_num = 4

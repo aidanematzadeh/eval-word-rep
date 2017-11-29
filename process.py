@@ -1,11 +1,13 @@
 import os
+
+import joblib
+
 import gensim
 import numpy as np
 
 import scipy
 import scipy.spatial
 import scipy.io
-import pickle
 import os.path
 import codecs
 import pandas
@@ -39,7 +41,7 @@ def load_scores(path):
     """ Loads a pickle file.
     """
     with open(path, 'rb') as f:
-        scores = pickle.load(f, encoding='latin1')
+        scores = joblib.load(f)
     return scores
 
 
@@ -66,7 +68,7 @@ def get_norms(norms_pickle, norms_path=None, regeneratePickle=False):
             norms[cue][target] = float(nodes[5])  # FSG, p(target|cue)
 
     with open(norms_pickle, 'wb') as output:
-        pickle.dump(norms, output)
+        joblib.dump(norms, output)
     return norms
 
 
@@ -83,13 +85,13 @@ def get_w2v(w2vcos_pickle, w2vcond_pickle,
         return w2v_cos, w2v_cond
 
     if binary_flag:  # Loading a pretrained binary file from Google
-        model = gensim.models.Word2Vec.load_word2vec_format(w2v_path,
-                                                            binary=True)
+        model = gensim.models.KeyedVectors.load_word2vec_format(w2v_path,
+                                                                binary=True)
     else:  # Loading a model trained by gensim
         #with open(w2v_path, 'rb') as f:
-        #    model = pickle.load(f.read(), encoding='latin1')
+        #    model = joblib.load(f.read())
         #with open(w2v_path, 'wb') as output:
-        #    pickle.dump(model, output)
+        #    joblib.dump(model, output)
         model = gensim.models.Word2Vec.load(w2v_path)
 
     print("Done loading the Gensim model.")
@@ -153,9 +155,9 @@ def get_w2v(w2vcos_pickle, w2vcond_pickle,
     if writePickle:
         print('Pickling model scores')
         with open(w2vcond_pickle, 'wb') as output:
-            pickle.dump(w2v_cond, output)
+            joblib.dump(w2v_cond, output)
         with open(w2vcos_pickle, 'wb') as output:
-            pickle.dump(w2v_cos, output)
+            joblib.dump(w2v_cos, output)
     else:
         print('Not caching pickles because of size')
 
@@ -275,7 +277,7 @@ def get_gibbslda_avg(gibbslda_pickle, beta=0.01, norms=None, vocab_path=None, la
 
     if writePickle:
         with open(gibbslda_pickle, 'wb') as output:
-            pickle.dump(avg_condprob, output)
+            joblib.dump(avg_condprob, output)
 
     return avg_condprob
 
@@ -311,7 +313,7 @@ def get_gibbslda(gibbslda_path, beta=0.01, norms=None, vocab_path=None,
 
 
     with open(gibbslda_path, 'wb') as output:
-        pickle.dump(condprob, output)
+        joblib.dump(condprob, output)
 
     return condprob
 
@@ -357,7 +359,7 @@ def get_tsg(tsg_path, cond_eq, norms=None, vocab_path=None,
         condprob = condprob_nmgeq4(norms, word2id, topics, gamma)
 
     with open(tsg_path, 'wb') as output:
-        pickle.dump(condprob, output)
+        joblib.dump(condprob, output)
 
     return condprob
 
@@ -421,7 +423,7 @@ def get_tsgfreq(tsgfreq_pickle, norms=None, vocab_path=None,
 
     if writePickle:
         with open(tsgfreq_pickle, 'wb') as output:
-            pickle.dump(tsgfreq, output)
+            joblib.dump(tsgfreq, output)
 
     return tsgfreq
 
@@ -460,7 +462,7 @@ def get_allpairs(allpairs_pickle, norms, cbow=None, sg=None, lda=None, glove=Non
     print("cues and targets in norms and other data %d" % len(allpairs))
 
     with open(allpairs_pickle, 'wb') as output:
-        pickle.dump(allpairs, output)
+        joblib.dump(allpairs, output)
     return allpairs
 
 def get_allpairs_generalized(allpairs_pickle, norms, models, regeneratePickle=False):
@@ -491,7 +493,7 @@ def get_allpairs_generalized(allpairs_pickle, norms, models, regeneratePickle=Fa
     print("cues and targets in norms and other data %d" % len(allpairs))
 
     with open(allpairs_pickle, 'wb') as output:
-        pickle.dump(allpairs, output)
+        joblib.dump(allpairs, output)
     return allpairs
 
 
@@ -543,7 +545,7 @@ def get_tuples(tuples_pickle, norms, allpairs, regeneratePickle=False, writeTupl
 
 
     with open(tuples_pickle, 'wb') as output:
-        pickle.dump(tuples, output)
+        joblib.dump(tuples, output)
 
     return tuples
 
@@ -605,9 +607,9 @@ def get_glove(glovecos_pickle, glovecond_pickle, glove_path,
     if writePickle:
         print('Writing pickles')
         with open(glovecond_pickle, 'wb') as output:
-            pickle.dump(glove_cond, output)
+            joblib.dump(glove_cond, output)
         with open(glovecos_pickle, 'wb') as output:
-            pickle.dump(glove_cos, output)
+            joblib.dump(glove_cos, output)
 
     print("cosine size %d norms size %d cond size %d" %
           (len(glove_cos), len(norms), len(glove_cond)))

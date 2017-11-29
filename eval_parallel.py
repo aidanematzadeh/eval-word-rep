@@ -7,8 +7,8 @@ import pandas as pd
 import itertools
 import json
 import multiprocessing
+import joblib
 from joblib import Parallel, delayed
-import pickle
 
 import process
 import evaluate
@@ -98,7 +98,7 @@ def score_model_worker(args):
     print('Getting triangle inequality results for '+ stype)
     te_dist, sim_dist, te_ratio = evaluate.traingle_inequality_threshold(stype, tuples, scores) #, commonwords, threshs)
     with open(os.path.join(ctrl['resultsPath'], stype + "_te.pickle"), 'wb') as output:
-        pickle.dump(te_dist, output)
+        joblib.dump(te_dist, output)
 
     evaluate.plot_traingle_inequality(te_dist, sim_dist,
                                       os.path.join(ctrl['resultsPath'], stype + "_te."))
@@ -163,7 +163,9 @@ if __name__ == "__main__":
     print('Retrieving similarities for %s models' % len(ctrl['models']))
     inputs = [(x, ctrl, norms) for x in ctrl['models']]
 
-    num_cores = multiprocessing.cpu_count() // 2
+    # num_cores = multiprocessing.cpu_count() // 2
+    num_cores = 1
+
     print('Multiprocessing with %s cores' % num_cores)
     par_results = Parallel(n_jobs=num_cores)(delayed(eval_model_worker)(i) for i in inputs)
 
