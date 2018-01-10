@@ -145,7 +145,7 @@ def sort_pairs(scores, allpairs):
         sorted_scores[cue][target] = scores[cue][target]
 
     for cue in sorted_scores.keys():
-        sorted_scores[cue] = sorted(sorted_scores[cue].items(), key=operator.itemgetter(1), reverse=True)
+        sorted_scores[cue] = sorted(sorted_scores[cue].items(), key=operator.itemgetter(1,0), reverse=True)
 
     return sorted_scores
 
