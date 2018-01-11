@@ -1,0 +1,21 @@
+{
+  "runname": "dec-2017",
+  "dataPath": "/shared_hd1/word-representations/data",
+  "cacheDir": "/shared_hd1/word-representations/results/dec-2017/cached",
+  "resultsDir": "/shared_hd1/word-representations/results/dec-2017",
+  "normsPath": "/shared_hd1/word-representations/norms",
+  "models": [ 
+    {"path": "tasa-freq", "type": "freq", "overwriteCache": 1, "counts_path": "5w_positive_counts", "vocab_path": "5w_word2id", "ids_path": "5w_positive_ids"},
+    {"path": "tasa-cbow", "type": "w2v", "overwriteCache": 1, "condEq": "eq1", "bin": 0},
+    {"path": "tasa-skipgram", "type": "w2v", "overwriteCache": 1, "condEq": "eq1", "bin": 0},
+    {"path": "tasa-glove", "type": "glove", "overwriteCache": 1, "condEq": "eq1"},
+    {"path": "googlenews-w2v", "type": "w2v", "overwriteCache": 1, "condEq": "eq1", "bin": 1},
+    {"path": "tasa-gibbslda", "type": "gibbslda", "overwriteCache": 1, "vocab_path": "ldatasa_word2id", "lambda_path": "lambda/"},
+    {"path": "wiki-freq", "type": "freq", "overwriteCache": 1, "counts_path": "5w_positive_counts", "vocab_path": "5w_word2id", "ids_path": "5w_positive_ids"},
+    {"path": "wiki-skipgram", "type": "w2v", "overwriteCache": 1, "condEq": "eq1", "bin": 0},
+    {"path": "wiki-cbow", "type": "w2v", "overwriteCache": 1, "condEq": "eq1", "bin": 0},
+    {"path": "wiki-glove", "type": "glove", "overwriteCache": 1, "condEq": "eq1"},
+    {"path": "pretrained-glove", "type": "glove", "overwriteCache": 1, "condEq": "eq1"}
+  ],
+  "regenerate": ["allpairs", "asympairs", "tuples"]
+}
