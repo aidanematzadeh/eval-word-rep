@@ -1,0 +1,31 @@
+{
+  "runname": "merge_test",
+  "dataPath": "/shared_hd1/word-representations/data",
+  "cacheDir": "/shared_hd1/word-representations/results/merge_test1/cached",
+  "resultsDir": "/shared_hd1/word-representations/results/merge_test/results",
+  "normsPath": "/shared_hd1/word-representations/norms",
+  "models": [ 
+    {"path": "tasa-freq", "type": "freq", "overwriteCache": 1, "counts_path": "5w_positive_counts", "vocab_path": "5w_word2id", "ids_path": "5w_positive_ids"},
+    {"path": "tasa-cbow", "type": "w2v", "overwriteCache": 1, "condEq": "eq1", "flavor": "gensim"},
+    {"path": "tasa-skipgram", "type": "w2v", "overwriteCache": 1, "condEq": "eq1", "flavor": "gensim"},
+    {"path": "tasa-glove", "type": "glove", "overwriteCache": 1, "condEq": "eq1"},
+    {"path": "googlenews-w2v", "type": "w2v", "overwriteCache": 1, "condEq": "eq1", "flavor": "keyed_binary"},
+    {"path": "tasa-gibbslda", "type": "gibbslda", "overwriteCache": 1, "vocab_path": "ldatasa_word2id", "lambda_path": "lambda/"},
+    {"path": "wiki-freq", "type": "freq", "overwriteCache": 1, "counts_path": "5w_positive_counts", "vocab_path": "5w_word2id", "ids_path": "5w_positive_ids"},
+    {"path": "wiki-skipgram", "type": "w2v", "overwriteCache": 1, "condEq": "eq1", "flavor": "gensim"},
+    {"path": "wiki-cbow", "type": "w2v", "overwriteCache": 1, "condEq": "eq1","flavor": "gensim"},
+    {"path": "wiki-glove", "type": "glove", "overwriteCache": 1, "condEq": "eq1"},
+    {"path": "pretrained-glove", "type": "glove", "overwriteCache": 1, "condEq": "eq1"},
+    {"path": "cbow_raw", "type": "w2v", "overwriteCache": 1, "condEq": "eq1", "flavor":"keyed_text"},
+    {"path": "glove_raw", "type": "w2v", "overwriteCache": 1, "condEq": "eq1", "flavor":"keyed_text"},
+    {"path": "skipgram_raw", "type": "w2v", "overwriteCache": 1, "condEq": "eq1", "flavor":"keyed_text"},
+    {"path": "tuned_cbow_2e60", "type": "w2v", "overwriteCache": 1, "condEq": "eq1", "flavor":"keyed_text"},
+    {"path": "tuned_cbow_e19", "type": "w2v", "overwriteCache": 1, "condEq": "eq1", "flavor":"keyed_text"},
+    {"path": "tuned_cbow_graph", "type": "w2v", "overwriteCache": 1, "condEq": "eq1", "flavor":"keyed_text"},
+    {"path": "tuned_glove_e47", "type": "w2v", "overwriteCache": 1, "condEq": "eq1", "flavor":"keyed_text"},
+    {"path": "tuned_glove_graph", "type": "w2v", "overwriteCache": 1, "condEq": "eq1", "flavor":"keyed_text"},
+    {"path": "tuned_skipgram_e28", "type": "w2v", "overwriteCache": 1, "condEq": "eq1", "flavor":"keyed_text"},
+    {"path": "tuned_skipgram_graph", "type": "w2v", "overwriteCache": 1, "condEq": "eq1", "flavor":"keyed_text"}
+  ],
+  "regenerate": []
+}

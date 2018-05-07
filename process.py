@@ -73,32 +73,43 @@ def get_norms(norms_pickle, norms_path=None, regeneratePickle=False):
 
 
 def get_w2v(w2vcos_pickle, w2vcond_pickle,
-            norms=None, w2v_path=None, binary_flag=None, cond_eq=None, writePickle=True, regeneratePickle=False):
+            norms=None, w2v_path=None, flavor=None, cond_eq=None, writePickle=True, regeneratePickle=False):
     """ Load (Gensim) Word2Vec representations for words in norms and popluate
     their similarities using cosine and p(w2|w1).
     Uses gensim to load the representations.
-    """
+    """    
     if os.path.exists(w2vcos_pickle) and not regeneratePickle:
         print('Existing W2V pickle found...')
         w2v_cos = load_scores(w2vcos_pickle)
         w2v_cond = load_scores(w2vcond_pickle)
         return w2v_cos, w2v_cond
 
-    if binary_flag:  # Loading a pretrained binary file from Google
+    if flavor == 'keyed_binary':  # Loading a pretrained binary file from Google
         model = gensim.models.KeyedVectors.load_word2vec_format(w2v_path,
                                                                 binary=True)
-    else:  # Loading a model trained by gensim
+    elif flavor == 'keyed_text': 
+        model = gensim.models.KeyedVectors.load_word2vec_format(w2v_path,
+                                                                binary=False)    
+    elif flavor == 'gensim':  # Loading a model trained by gensim
         #with open(w2v_path, 'rb') as f:
         #    model = joblib.load(f.read())
         #with open(w2v_path, 'wb') as output:
         #    joblib.dump(model, output)
         model = gensim.models.Word2Vec.load(w2v_path)
+    else:
+        raise ValueError('Flavor not recognized')    
 
     print("Done loading the Gensim model.")
 
     def softmax(x):
         return np.exp(x) / np.sum(np.exp(x), axis=0)
 
+    def cueMissing(model, cue, flavor):
+        '''two different ways of representing the vocabulary'''
+        if flavor == 'gensim':
+            return(cue not in model)    
+        else:
+            return(cue not in model.vocab)
 
     w2v_cos, w2v_cond = {}, {}
     # List of all the norms in the model. Used in normalization of cond prob.
@@ -106,7 +117,8 @@ def get_w2v(w2vcos_pickle, w2vcond_pickle,
     # Note that the cosine is the same as dot product for cbow vectors
     print('Getting cosine similiarities')
     for cue in norms:
-        if cue not in model:
+        if cueMissing(model, cue, flavor):
+            print('Cue not found: '+cue)
             continue
         if cue not in w2v_cos:
             w2v_cos[cue], w2v_cond[cue] = {}, {}
@@ -484,8 +496,6 @@ def get_allpairs_generalized(allpairs_pickle, norms, models, regeneratePickle=Fa
                 #import pdb
                 #pdb.set_trace()
             else:
-                #import pdb
-                #pdb.set_trace()
                 print('Missing cue or target!')
                 print((cue, target))
 

@@ -13,8 +13,12 @@ from joblib import Parallel, delayed
 import process
 import evaluate
 
-def eval_model_worker(args):
+def eval_model_worker(args):    
+
     model_ctrl, ctrl, norms = args
+    print('Evaluating model:')
+    print(model_ctrl)
+    print(ctrl)
 
     if model_ctrl['type'] == 'w2v':
         # word2vec inputs returns two outputs, cosine and conditional
@@ -23,7 +27,7 @@ def eval_model_worker(args):
             w2vcond_pickle = os.path.join(ctrl['cachePath'],model_ctrl['path']+'_cond.pickle'),
             norms = norms,
             w2v_path = os.path.join(ctrl['dataPath'], model_ctrl['path'],'model'),
-            binary_flag = model_ctrl['bin'] == 1,
+            flavor = model_ctrl['flavor'],
             cond_eq = model_ctrl['condEq'],
             writePickle=True,
             regeneratePickle=model_ctrl['overwriteCache'] == 1)
@@ -214,5 +218,7 @@ if __name__ == "__main__":
 
 
     print('Saving results')
-    score_df = pd.DataFrame([x['scores'] for x in par_scores])
+    # remove 'sim_dist', 'te_dist', and te_ro values for a managable output CSV
+    score_df = pd.DataFrame([x['scores'] for x in par_scores])[['model_id','asym_rho', 'correlation', 'median_found_rank_0', 'median_found_rank_1', 'median_found_rank_2', 'median_max_rank_0', 'median_max_rank_1', 'median_max_rank_2']]
     score_df.to_csv(os.path.join(os.path.join(ctrl['resultsPath'],'model_scores.csv')),index=False)
+
