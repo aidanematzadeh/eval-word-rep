@@ -297,13 +297,13 @@ def get_gibbslda_avg(gibbslda_pickle, beta=0.01, norms=None, vocab_path=None, la
 
 
 def get_gibbslda(gibbslda_path, beta=0.01, norms=None, vocab_path=None,
-            lambda_path=None):
+            lambda_path=None, regeneratePickle = False):
     """ Get the cond prob for word representations learned by
     Gibbs sampler code.
     vocab_path: the word2id mappings
     """
 
-    if os.path.exists(gibbslda_path):
+    if os.path.exists(gibbslda_path) and not regeneratePickle:
         return load_scores(gibbslda_path)
 
     #TODO need to change 1-->0?
@@ -331,7 +331,7 @@ def get_gibbslda(gibbslda_path, beta=0.01, norms=None, vocab_path=None,
 
 
 def get_tsg(tsg_path, cond_eq, norms=None, vocab_path=None,
-            lambda_path=None, gamma_path=None, mu_path=None):
+            lambda_path=None, gamma_path=None, mu_path=None, regeneratePickle=False):
     """ Get the cond prob for word representations learned by
     Hoffman-VBLDA-based code.
     Calculate p(target|cue) = sum_topics{p(target|topic) p(topic|cue)}
@@ -339,7 +339,7 @@ def get_tsg(tsg_path, cond_eq, norms=None, vocab_path=None,
     vocab_path: the word2id mappings
     """
 
-    if os.path.exists(tsg_path):
+    if os.path.exists(tsg_path) and not regeneratePickle:
         return load_scores(tsg_path)
 
     word2id, id2word = read_tsgvocab(vocab_path)
@@ -406,11 +406,13 @@ def get_tsgfreq(tsgfreq_pickle, norms=None, vocab_path=None,
     if os.path.exists(tsgfreq_pickle) and not regeneratePickle:
         return load_scores(tsgfreq_pickle)
 
-    ids, counts = read_tsgdata(counts_path, ids_path)
+    ids, counts = read_tsgdata(counts_path, ids_path) #this appears to be limited to items in the norms
+    #!!! asking Aida about this
     word2id, id2word = read_tsgvocab(vocab_path)
 
     tsgfreq = {}
     for cue in norms:
+        print('cue: '+cue)
         if cue not in word2id.keys():
             continue
         if cue not in tsgfreq:
@@ -419,11 +421,14 @@ def get_tsgfreq(tsgfreq_pickle, norms=None, vocab_path=None,
         cueid = word2id[cue]
 
         targetlist = set(list(norms[cue].keys()) + list(norms.keys()))
-        for targetid, targetcount in zip(ids[cueid], counts[cueid]):
+        for targetid, targetcount in zip(ids[cueid], counts[cueid]):      
+            print(targetid)
             target = id2word[targetid]
+            print('target: '+target)
             if target not in targetlist:
                 continue
-            tsgfreq[cue][target] = targetcount
+            else:
+                tsgfreq[cue][target] = targetcount
 
         # TODO some of the targets do not happen in the document,
         # their freq is zero.
@@ -477,12 +482,12 @@ def get_allpairs(allpairs_pickle, norms, cbow=None, sg=None, lda=None, glove=Non
         joblib.dump(allpairs, output)
     return allpairs
 
-def get_allpairs_generalized(allpairs_pickle, norms, models, regeneratePickle=False):
+def get_allpairs_generalized(allpairs_cache_path, norms, models, regeneratePickle=False):
     """ Get all cue-target pairs that occur in all of our evaluation sets, that is,
     Nelson norms, cbow, and LDA.
     """
-    if os.path.exists(allpairs_pickle) and not regeneratePickle:
-        return load_scores(allpairs_pickle)
+    if os.path.exists(allpairs_cache_path) and not regeneratePickle:
+        return load_scores(allpairs_cache_path)
 
     allpairs, normpairs = [], []
     for cue in norms:
@@ -496,13 +501,15 @@ def get_allpairs_generalized(allpairs_pickle, norms, models, regeneratePickle=Fa
                 #import pdb
                 #pdb.set_trace()
             else:
-                print('Missing cue or target!')
+                #import pdb
+                #pdb.set_trace()
+                #print('Missing cue or target!')
                 print((cue, target))
 
-    print("cues and targets in norms %d" % len(normpairs))
-    print("cues and targets in norms and other data %d" % len(allpairs))
+    print("cues and targets in evaluation dataset: %d" % len(normpairs))
+    print("cues and targets in evaluation dataset and all models: %d" % len(allpairs))
 
-    with open(allpairs_pickle, 'wb') as output:
+    with open(allpairs_cache_path, 'wb') as output:
         joblib.dump(allpairs, output)
     return allpairs
 
