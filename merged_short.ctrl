@@ -8,11 +8,7 @@
   "similarity_datasets": ["EN-MC-30", "EN-MEN-TR-3k",  "EN-MTurk-287",  "EN-MTurk-771",  "EN-RG-65",  "EN-RW-STANFORD",  "EN-WS-353-ALL",  "EN-WS-353-REL",  "EN-WS-353-SIM",  "EN-YP-130"],
   "models": [ 
     {"path": "tuned_cbow_e19", "type": "w2v", "overwriteCache": 1, "condEq": "eq1", "flavor":"keyed_text"},
-    {"path": "tuned_cbow_graph", "type": "w2v", "overwriteCache": 1, "condEq": "eq1", "flavor":"keyed_text"},
-    {"path": "tuned_glove_e47", "type": "w2v", "overwriteCache": 1, "condEq": "eq1", "flavor":"keyed_text"},
-    {"path": "tuned_glove_graph", "type": "w2v", "overwriteCache": 1, "condEq": "eq1", "flavor":"keyed_text"},
-    {"path": "tuned_skipgram_e28", "type": "w2v", "overwriteCache": 1, "condEq": "eq1", "flavor":"keyed_text"},
-    {"path": "tuned_skipgram_graph", "type": "w2v", "overwriteCache": 1, "condEq": "eq1", "flavor":"keyed_text"}
+    {"path": "tuned_cbow_graph", "type": "w2v", "overwriteCache": 1, "condEq": "eq1", "flavor":"keyed_text"}
   ],
   "regenerate": []
 }
