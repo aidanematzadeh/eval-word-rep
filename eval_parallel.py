@@ -158,7 +158,7 @@ def score_model_worker(args):
 
 
     print('Getting ratio of asymmetries ' + stype)
-    if stype.endswith("cos") or (stype == 'tasa-freq'):
+    if stype.endswith("cos") or (stype in ('tasa-freq','wiki-freq')):
         # can't compute asym_rho for the frequency model (necessarily symmetrical)
         rd['scores']['asym_rho'] = None
     else:
