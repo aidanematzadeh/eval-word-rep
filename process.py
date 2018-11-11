@@ -13,6 +13,7 @@ import codecs
 import pandas
 import csv
 import glob
+import pickle
 
 # Reads and process data used in the evaluation.
 
@@ -40,8 +41,9 @@ class Glove_model(object):
 def load_scores(path):
     """ Loads a pickle file.
     """
+    print('Loading pickle from: '+path)
     with open(path, 'rb') as f:
-        scores = joblib.load(f)
+        scores = pickle.load(f)
     return scores
 
 
@@ -73,7 +75,7 @@ def get_norms(norms_pickle, norms_path=None, regeneratePickle=False):
 
 
 def get_w2v(w2vcos_pickle, w2vcond_pickle,
-            norms=None, w2v_path=None, flavor=None, cond_eq=None, writePickle=True, regeneratePickle=False):
+            norms=None, w2v_path=None, flavor=None, cond_eq=None, writePickle=False, regeneratePickle=False):
     """ Load (Gensim) Word2Vec representations for words in norms and popluate
     their similarities using cosine and p(w2|w1).
     Uses gensim to load the representations.
@@ -100,9 +102,16 @@ def get_w2v(w2vcos_pickle, w2vcond_pickle,
         raise ValueError('Flavor not recognized')    
 
     print("Done loading the Gensim model.")
+    
+    def getVocabSize(model, flavor):
+        '''two different ways of representing the vocabulary'''
+        print('Vocab contains '+str(len(model.vocab.keys()))+' words')
+    
+    getVocabSize(model, flavor)
 
     def softmax(x):
         return np.exp(x) / np.sum(np.exp(x), axis=0)
+
 
     def cueMissing(model, cue, flavor):
         '''two different ways of representing the vocabulary'''
@@ -116,9 +125,16 @@ def get_w2v(w2vcos_pickle, w2vcond_pickle,
     wordlist = set([])
     # Note that the cosine is the same as dot product for cbow vectors
     print('Getting cosine similiarities')
+    num_cues = 0 
+    num_missing_cues = 0
+
     for cue in norms:
+        num_cues += 1 
         if cueMissing(model, cue, flavor):
-            print('Cue not found: '+cue)
+            num_missing_cues +=1 
+            #import pdb
+            #pdb.set_trace()
+            #print('Cue not found: '+cue)
             continue
         if cue not in w2v_cos:
             w2v_cos[cue], w2v_cond[cue] = {}, {}
@@ -133,6 +149,8 @@ def get_w2v(w2vcos_pickle, w2vcond_pickle,
             if target not in w2v_cos[cue]:
                 w2v_cos[cue][target] = np.round(model.similarity(cue, target), decimals=6)
                 w2v_cos[target][cue] = w2v_cos[cue][target]
+
+    print('Missing '+str(num_missing_cues)+' of '+str(num_cues)+' cues')
 
     # Calculate p(target|cue) where cue is w1 and target is w2
     # log(p(w2|w1)) = log(exp(w2.w1)) - log(sum(exp(w',w1)))
@@ -162,7 +180,7 @@ def get_w2v(w2vcos_pickle, w2vcond_pickle,
                 target_probvec = model.column_normalized[word2id[target], :]
                 w2v_cond[cue][target] = np.round(np.sum(cue_topics_dist * target_probvec), decimals=6)
     else:
-        raise ValuError('Unrecognized equation for conditional probability assessment')
+        raise ValueError('Unrecognized equation for conditional probability assessment')
 
     if writePickle:
         print('Pickling model scores')
@@ -176,6 +194,7 @@ def get_w2v(w2vcos_pickle, w2vcond_pickle,
     print("cosine size %d norms size %d cond size %d" %
           (len(w2v_cos), len(norms), len(w2v_cond)))
 
+    # check the size of the objects in memory    
     return w2v_cos, w2v_cond
 
 
@@ -240,7 +259,7 @@ def condprob_nmgeq4(norms, word2id, topics, gamma):
     return condprob
 
 
-def get_gibbslda_avg(gibbslda_pickle, beta=0.01, norms=None, vocab_path=None, lambda_path=None, writePickle=True, regeneratePickle=False):
+def get_gibbslda_avg(gibbslda_pickle, beta=0.01, norms=None, vocab_path=None, lambda_path=None, writePickle=False, regeneratePickle=False):
     """ Get the cond prob for word representations learned by
     Gibbs sampler code.
     vocab_path: the word2id mappings
@@ -399,7 +418,7 @@ def read_tsgvocab(vocab_path):
 
 
 def get_tsgfreq(tsgfreq_pickle, norms=None, vocab_path=None,
-                counts_path=None, ids_path=None, writePickle=True, regeneratePickle= False):
+                counts_path=None, ids_path=None, writePickle=False, regeneratePickle= False):
     """ Get the freq of each word in the documents in TSG model.
     vocab_path: the word2id mappings
     """
@@ -412,7 +431,7 @@ def get_tsgfreq(tsgfreq_pickle, norms=None, vocab_path=None,
 
     tsgfreq = {}
     for cue in norms:
-        print('cue: '+cue)
+        #print('cue: '+cue)
         if cue not in word2id.keys():
             continue
         if cue not in tsgfreq:
@@ -422,9 +441,9 @@ def get_tsgfreq(tsgfreq_pickle, norms=None, vocab_path=None,
 
         targetlist = set(list(norms[cue].keys()) + list(norms.keys()))
         for targetid, targetcount in zip(ids[cueid], counts[cueid]):      
-            print(targetid)
+            #print(targetid)
             target = id2word[targetid]
-            print('target: '+target)
+            #print('target: '+target)
             if target not in targetlist:
                 continue
             else:
@@ -488,23 +507,23 @@ def get_allpairs_generalized(allpairs_cache_path, norms, models, regeneratePickl
     """
     if os.path.exists(allpairs_cache_path) and not regeneratePickle:
         return load_scores(allpairs_cache_path)
-
+        
     allpairs, normpairs = [], []
     for cue in norms:
         for target in norms[cue]:
             normpairs.append((cue, target))
-            model_presence = np.array([0 if (cue not in model or target not in model[cue]) else 1 for model in models])
-            #print(model_presence)
-            if np.all(model_presence):
-                allpairs.append((cue, target))
-            # elif sum(model_presence) == (len(model_presence) -1):
-                #import pdb
-                #pdb.set_trace()
+            cue_present = np.array([0 if cue not in model else 1 for model in models])
+            target_present = np.array([0 if target not in model else 1 for model in models])
+            
+            if not np.all(cue_present):
+                num_cues_missing = len(cue_present) - np.sum(cue_present)
+                print('Missing cue: '+cue+" (missing from "+str(num_cues_missing)+" models)")
+            elif not np.all(target_present):
+                num_targets_missing = len(target_present) - np.sum(target_present)
+                print('Missing cue: '+target+" (missing from "+str(num_targets_missing)+" models)")
             else:
-                #import pdb
-                #pdb.set_trace()
-                #print('Missing cue or target!')
-                print((cue, target))
+                allpairs.append((cue, target))
+                        
 
     print("cues and targets in evaluation dataset: %d" % len(normpairs))
     print("cues and targets in evaluation dataset and all models: %d" % len(allpairs))
@@ -568,7 +587,7 @@ def get_tuples(tuples_pickle, norms, allpairs, regeneratePickle=False, writeTupl
 
 
 def get_glove(glovecos_pickle, glovecond_pickle, glove_path,
-            norms=None, cond_eq=1, writePickle=True, regeneratePickle=False):
+            norms=None, cond_eq=1, writePickle=False, regeneratePickle=False):
     """ Load (Gensim) Word2Vec representations for words in norms and popluate
     their similarities using cosine and p(w2|w1).
     Uses gensim to load the representations.
