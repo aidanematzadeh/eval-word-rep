@@ -5,13 +5,29 @@ import matplotlib.pyplot as plt
 import operator
 import numpy
 import itertools
+import numpy as np
+np.seterr(divide='raise', invalid='raise')
 
 def rank_correlation(list1, list2):
     """
     Calculate the ranked correlation between items that between the two list of
     scores.
     """
-    return scipy.stats.spearmanr(list1, list2)
+
+    #list1_flat =  np.array([item for sublist in list1 for item in sublist])
+    
+    # !!! what are these lists?    
+    if np.any(np.isnan(np.array([x for x in list1]))):
+                print('NaN found in list 1')
+                #import pdb
+                #pdb.set_trace()
+
+    if np.any(np.isnan(np.array([x for x in list2]))):
+                print('NaN found in list 2')
+                #import pdb
+                #pdb.set_trace()
+
+    return scipy.stats.spearmanr(list1, list2, nan_policy='raise')
 
 
 def asymmetry(scores, pairs):
@@ -24,7 +40,8 @@ def asymmetry(scores, pairs):
     for cue, target in pairs:
         differences.append(scores[cue][target] - scores[target][cue])
         try:
-            ratios.append(scores[cue][target] / scores[target][cue])
+            val = scores[cue][target] / scores[target][cue]
+            ratios.append(val)
         except ZeroDivisionError:
             print(ZeroDivisionError)
             ratios.append(float('inf'))
@@ -127,6 +144,10 @@ def plot_percentile_rank(te_data, filename):
         for t in sorted(te_dist.keys())[1:]:
             min_value = numpy.min(te_dist[t])
             x.append(len(te_dist[t]))
+            if np.any(np.isnan(sim_dist)):
+                print('NaN found in sim dist')
+                #import pdb
+                #pdb.set_trace()
             y.append(scipy.stats.percentileofscore(sim_dist, min_value, kind='rank'))
             #y.append(scipy.stats.percentileofscore(te_dist[t], min_value, kind='rank'))
             z.append(min_value)
