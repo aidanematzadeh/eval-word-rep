@@ -16,12 +16,12 @@ def indices(d):
 #JP: So when my files say cbow they always mean gnews. When they say glove they mean 840b. When they say skipgram it's Wikipedia. So skipgram with graph in the filename is faruqui tuning on top of a Wikipedia+skipgram model
 
 FIX_MODEL_ID = {
-	"pretrained-glove_cos" : "googlenews?-glove_cos", # what is the "pretrained" dataset? GoogleNews?
-	"pretrained-glove_cond" : "googlenews?-glove_cond",
+	"pretrained-glove_cos" : "googlenews-glove_cos", # what is the "pretrained" dataset? GoogleNews?
+	"pretrained-glove_cond" : "googlenews-glove_cond",
 	"cbow_raw_cos": "googlenews-cbow.raw_cos",
 	"cbow_raw_cond" : "googlenews-cbow.raw_cond", 
-	"glove_raw_cos": "googlenews-glove.raw_cos", 
-	"glove_raw_cond": "googlenews-glove.raw_cond", 
+	"glove_raw_cos": "840B-glove.raw_cos", 
+	"glove_raw_cond": "840B-glove.raw_cond", 
 	"skipgram_raw_cos": "wiki-skipgram.raw_cos",
 	"skipgram_raw_cond": "wiki-skipgram.raw_cond",
 	"tuned_cbow_2e60_cos": "googlenews-tuned.cbow.2e60_cos",
@@ -32,8 +32,8 @@ FIX_MODEL_ID = {
 	"tuned_cbow_graph_cond": "googlenews-tuned.cbow.graph_cond",
 	"tuned_cbow_e47_cos": "googlenews-tuned.cbow.e47_cos",
 	"tuned_cbow_e47_cond": "googlenews-tuned.cbow.e47_cond",
-	"tuned_glove_graph_cos": "googlenews-tuned.glove.graph_cos",
-	"tuned_glove_graph_cond": "googlenews-tuned.glove.graph_cond",
+	"tuned_glove_graph_cos": "840B-tuned.glove.graph_cos",
+	"tuned_glove_graph_cond": "840B-tuned.glove.graph_cond",
 	"tuned_skipgram_e28_cos": "wiki-tuned.skipgram.e28_cos",
 	"tuned_skipgram_e28_cond": "wiki-tuned.skipgram.e28_cond",
 	"tuned_skipgram_graph_cos": "wiki-tuned.skipgram.graph_cos",
@@ -54,6 +54,7 @@ FULL_NAME_OF_SOURCE = OrderedDict([
     ('wiki', 'Medium (Wikipedia)'),
     ('googlenews', 'Largest available'),
     ('pretrained', 'Largest available'),
+    ('840B', 'Largest available'),
 ])
 
 FULL_SOURCE_NAMES = indices(FULL_NAME_OF_SOURCE)
@@ -63,7 +64,8 @@ SHORT_NAME_OF_SOURCE = OrderedDict([
     ('wiki', 'Medium'),
     ('googlenews?', 'Largest avail.'),
     ('googlenews', 'Largest avail.'),
-    ('pretrained', 'Largest avail.'),    
+    ('pretrained', 'Largest avail.'),
+    ('840B', 'Largest avail.')    
 ])
 
 SHORT_SOURCE_NAMES = indices(SHORT_NAME_OF_SOURCE)
@@ -135,13 +137,15 @@ def table2(df):
     # Remove unused rows and columns.
     median_cols = ['median_found_rank_{}'.format(i) for i in range(3)]
 
-    cols = ['source', 'model','simtype'] + median_cols
+    cols = ['source', 'model','simtype'] + median_cols    
     new_df = (df.replace({
                   'source': FULL_NAME_OF_SOURCE,
                   'model': FULL_NAME_OF_MODEL,
                   'simtype': NAME_OF_SIMTYPE
               })
               .reset_index())
+
+    new_df = new_df.loc[new_df.simtype != 'cos.'] 
 
     # Merge the median columns together.
     new_df['median'] = np.apply_along_axis(lambda y: "/".join([roundIfPossible(x, stringify=True) for x in y]), 1, new_df[median_cols])
@@ -176,14 +180,41 @@ def table3(df):
     t3_models = ['Word2Vec CBOW', 'Word2Vec skip-gram','GloVe', 'LDA', 'Co-occurrence']
     new_df = new_df.loc[new_df.model.isin(t3_models)]
 
-
-    import pdb
-    pdb.set_trace()
-
     new_df = new_df.pivot_table(index='source', columns=['model', 'simtype'], values=['asym_rho'], aggfunc = lambda x: x ).fillna(MISSING)
 
     
     return new_df
+
+def table4(df):
+
+	# this will be 3 different models > {raw, faruqui, ours} > SIMLEX, MEN, assoc, asym
+
+	cols = ['source', 'model', 'simtype', 'asym_rho', 'nelson_norms_correlation', 'EN-MEN-TR-3k_correlation', 'EN-WS-353-SIM_correlation']
+
+	new_df = (df[cols]
+              .replace({
+                  'source': SHORT_NAME_OF_SOURCE,
+                  'model': FULL_NAME_OF_MODEL,
+                  'simtype': NAME_OF_SIMTYPE
+              })
+              .reset_index())
+              # Rearrange the table by the source and model.
+	del new_df['index']
+
+	new_df['asym_rho'] = new_df['asym_rho'].abs().round(decimals=2)
+	
+	import pdb
+	pdb.set_trace()
+
+	# [ ] get the Faruqui items
+	# [ ] get the raw items
+	# [ ] take the best scores from our retrofit models
+
+	# add the retrofitting method as an additional column
+
+
+
+
 
 def read_csv(fname):
 	df = pd.read_csv(fname)
@@ -236,7 +267,7 @@ def main():
     df = read_csv(args.in_fname)
     if not os.path.exists(args.out_dir):
     	os.makedirs(args.out_dir)	
-    for i, table_fn in enumerate([table1, table2, table3]):
+    for i, table_fn in enumerate([table1, table2, table3, table4]):
         table_df = table_fn(df)
         latex_table = to_latex(table_df)
         fname = os.path.join(args.out_dir, 'table{}.tex'.format(i + 1))
