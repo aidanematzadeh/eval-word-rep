@@ -213,10 +213,14 @@ if __name__ == "__main__":
     for similarity_dataset in ctrl['similarity_datasets']:
         print('Loading '+similarity_dataset+'...')
         similarity_dataset_path = os.path.join(ctrl['similarityDatasetsPath'],similarity_dataset+'.txt')                
-        sim_df = pd.read_table(similarity_dataset_path, header=None)
+        sim_df = pd.read_table(similarity_dataset_path, header=None)        
         if sim_df.shape[1] != 3:
             sim_df = pd.read_table(similarity_dataset_path, header=None, sep=' ')
         sim_df.columns = ['cue','target','value']
+
+        if np.any(sim_df.value ==0):
+            import pdb
+            pdb.set_trace()
 
         similarity_datasets[similarity_dataset] = {}
         for record in sim_df.to_dict('records'):
