@@ -45,7 +45,9 @@ FIX_MODEL_ID = {
 	"cbowe79_alpha0.75_cos": "googlenews-cbowe79.alpha0.75_cos",
 	"cbowe79_alpha0.75_cond": "googlenews-cbowe79.alpha0.75_cond",
 	"cbowe39_alpha0.5_cos": "googlenews-cbowe39.alpha0.5_cos",
-	"cbowe39_alpha0.5_cond": "googlenews-cbowe39.alpha0.5_cond"
+	"cbowe39_alpha0.5_cond": "googlenews-cbowe39.alpha0.5_cond",
+	"tuned_glove_e47_cos": "840B-tuned.glove.e47_cos",
+	"tuned_glove_e47_cond": "840B-tuned.glove.e47_cond"
 }
 
 
@@ -185,13 +187,16 @@ def table3(df):
     
     return new_df
 
+
+
 def table4(df):
 
 	# this will be 3 different models > {raw, faruqui, ours} > SIMLEX, MEN, assoc, asym
 
-	cols = ['source', 'model', 'simtype', 'asym_rho', 'nelson_norms_correlation', 'EN-MEN-TR-3k_correlation', 'EN-WS-353-SIM_correlation']
+	score_cols = ['asym_rho', 'nelson_norms_correlation', 'EN-MEN-TR-3k_correlation', 'EN-WS-353-SIM_correlation']
+	cols = ['source', 'model', 'simtype'] + score_cols
 
-	new_df = (df[cols]
+	new_df = (df.loc[df.simtype != 'cos',cols]
               .replace({
                   'source': SHORT_NAME_OF_SOURCE,
                   'model': FULL_NAME_OF_MODEL,
@@ -202,19 +207,71 @@ def table4(df):
 	del new_df['index']
 
 	new_df['asym_rho'] = new_df['asym_rho'].abs().round(decimals=2)
+		
+
+	faruqui_models = ["tuned.skipgram.graph","tuned.cbow.graph","tuned.glove.graph"]
+	faruqui_scores = new_df.loc[new_df.model.isin(faruqui_models),cols]
+
+	raw_models = ["skipgram.raw","cbow.raw","glove.raw"]
+	raw_scores = new_df.loc[new_df.model.isin(raw_models),cols]
+
+
+	# what are the subsets that I need to find the best performing element under
+
+	def geo_mean(iterable):
+		a = np.array(iterable)
+		return a.prod()**(1.0/len(a))
+
+	def getBestModelInSet(scores, metric_cols, model_ids_in_set):		
+		set_metrics = scores.loc[scores['model'].isin(model_ids_in_set)]
 	
-	import pdb
-	pdb.set_trace()
+		set_composite_scores = np.apply_along_axis(geo_mean, 1, set_metrics[metric_cols])	
 
-	# [ ] get the Faruqui items
-	# [ ] get the raw items
-	# [ ] take the best scores from our retrofit models
+		best_model = set_metrics['model'].values[np.argmax(set_composite_scores)]
 
-	# add the retrofitting method as an additional column
+		best_model_scores = scores.loc[scores.model == best_model]
+		return(best_model_scores)
 
 
+	
 
+	best_our_cbow = getBestModelInSet(new_df, score_cols, ["tuned.cbow.2e60", "tuned.cbow.e19","cbowe26.alpha0.25","cbowe79.alpha0.75","cbowe39.alpha0.5"])
 
+	best_our_glove = getBestModelInSet(new_df, score_cols, ["tuned.glove.e47"])
+
+	best_our_skipgram = getBestModelInSet(new_df, score_cols, ["tuned.skipgram.e28"])
+		
+	all_model_scores = pd.concat([faruqui_scores, raw_scores, best_our_glove,  best_our_skipgram, best_our_cbow])	
+
+	def extractName(x):
+		if 'graph' in x:
+			return('Faruqui')
+		elif 'raw' in x:
+			return('Raw')
+		else:
+			return('Ours')
+
+	def extractModel(x):
+		if 'cbow' in x:
+			return('CBOW')			
+		elif 'skipgram' in x:
+			return('Skipgram')
+		elif 'glove' in x:
+			return('GLoVe')
+
+	all_model_scores['set'] = [extractName(x) for x in  all_model_scores.model]
+	all_model_scores['model_name'] = [extractModel(x) for x in  all_model_scores.model]
+
+	# take a subset of columns
+	scores_to_write = all_model_scores[['set', 'model_name', 'EN-MEN-TR-3k_correlation', 'EN-WS-353-SIM_correlation', 'asym_rho', 'nelson_norms_correlation']]
+
+	for col in ['EN-MEN-TR-3k_correlation', 'EN-WS-353-SIM_correlation', 'asym_rho', 'nelson_norms_correlation']:
+	
+		scores_to_write[col] = np.round(scores_to_write[col], 2)
+	
+	scores_to_write = scores_to_write.sort_values(by=['set', 'model_name'])
+	
+	return(scores_to_write)
 
 def read_csv(fname):
 	df = pd.read_csv(fname)
@@ -233,6 +290,10 @@ def read_csv(fname):
 		if len(model_simtype) == 1:
 			model_simtype.append(None)
 		model, simtype = model_simtype		
+		if simtype not in ('cos','cond',None):
+			import pdb
+			pdb.set_trace()
+			raise ValueError("Simtype must be one of cos, cond or None")
 		return source, model, simtype
 
 

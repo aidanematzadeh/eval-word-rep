@@ -54,24 +54,27 @@ def get_norms(norms_pickle, norms_path=None, regeneratePickle=False):
     Norms are formatted as: CUE, TARGET, NORMED?, #G, #P, FSG, BSG,
     """
     if os.path.exists(norms_pickle) and not regeneratePickle:
+        print('Loading an existing norms pickle')
         return load_scores(norms_pickle)
 
-    # The value of zero means that the norms[cue][target] does not exist.
-    norms = {}
-    for filename in glob.glob(os.path.join(norms_path, '*.bin')):
-        normfile = codecs.open(filename, 'r', encoding="ISO-8859-1")
-        normfile.readline()
-        for line in normfile:
-            nodes = line.strip().split(',')
-            cue = nodes[0].strip().lower()
-            target = nodes[1].strip().lower()
-            if cue not in norms:
-                norms[cue] = {}
-            norms[cue][target] = float(nodes[5])  # FSG, p(target|cue)
+    else:
+        print('Regenerating norms pickle')
+        # The value of zero means that the norms[cue][target] does not exist.
+        norms = {}
+        for filename in glob.glob(os.path.join(norms_path, '*.bin')):
+            normfile = codecs.open(filename, 'r', encoding="ISO-8859-1")
+            normfile.readline()
+            for line in normfile:
+                nodes = line.strip().split(',')
+                cue = nodes[0].strip().lower()
+                target = nodes[1].strip().lower()
+                if cue not in norms:
+                    norms[cue] = {}
+                norms[cue][target] = float(nodes[5])  # FSG, p(target|cue)
 
-    with open(norms_pickle, 'wb') as output:
-        joblib.dump(norms, output)
-    return norms
+        with open(norms_pickle, 'wb') as output:
+            joblib.dump(norms, output)
+        return norms
 
 
 def get_w2v(w2vcos_pickle, w2vcond_pickle,
