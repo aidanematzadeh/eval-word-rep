@@ -219,8 +219,7 @@ if __name__ == "__main__":
         sim_df.columns = ['cue','target','value']
 
         if np.any(sim_df.value ==0):
-            import pdb
-            pdb.set_trace()
+            sim_df.value = sim_df.value + 10**-10 #smoothing
 
         similarity_datasets[similarity_dataset] = {}
         for record in sim_df.to_dict('records'):
