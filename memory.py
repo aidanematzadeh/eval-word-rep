@@ -2,11 +2,9 @@ import subprocess
 import psutil
 
 def getTotalMemoryUsage():	
-	mem_usage = 0.0 #psutil.virtual_memory().percent 
-	#$print('in memory usage')
-	#import pdb
-	#pdb.set_trace()
+	mem_usage = psutil.virtual_memory().percent 
 	#print('Memory usage at marker '+str(marker)+': '+str(mem_usage) +'%')
+        # be concerned with memory overhead from checking memory
 	return(mem_usage)
 
 

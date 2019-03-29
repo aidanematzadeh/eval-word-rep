@@ -14,6 +14,7 @@ import pandas
 import csv
 import glob
 import pickle
+import memory
 
 # Reads and process data used in the evaluation.
 
@@ -293,6 +294,7 @@ def get_gibbslda_avg(gibbslda_pickle, beta=0.01, norms=None, vocab_path=None, la
             topics[k] = topics[k] / sum(topics[k])
         condprobs[filename] = condprob_gsteq8(norms, word2id, topics)
         count += 1
+        memory.memoryCheckpoint(filename,'LDA_load')
 
     print('Getting conditional probability similiarities')
     avg_condprob = {}

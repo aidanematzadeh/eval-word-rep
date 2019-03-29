@@ -252,7 +252,7 @@ if __name__ == "__main__":
     inputs = [(ctrl['models'][x], ctrl, retrieval_list, x) for x in range(len(ctrl['models']))] 
 
     # num_cores = multiprocessing.cpu_count() // 2
-    num_cores = 12 #increasing this to any reasonable value causes a memory error on Chompsky
+    num_cores = 24 #increasing this to any reasonable value causes a memory error on Chompsky
 
     # [ ] replace references to norms with "retrievalList" in process.py
     
