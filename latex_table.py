@@ -193,7 +193,7 @@ def table4(df):
 
 	# this will be 3 different models > {raw, faruqui, ours} > SIMLEX, MEN, assoc, asym
 
-	score_cols = ['asym_rho', 'nelson_norms_correlation', 'EN-MEN-TR-3k_correlation', 'EN-WS-353-SIM_correlation']
+	score_cols = ['asym_rho', 'nelson_norms_correlation', 'EN-SL-999_correlation', 'EN-WS-353-SIM_correlation']
 	cols = ['source', 'model', 'simtype'] + score_cols
 
 	new_df = (df.loc[df.simtype != 'cos',cols]
@@ -263,13 +263,13 @@ def table4(df):
 	all_model_scores['model_name'] = [extractModel(x) for x in  all_model_scores.model]
 
 	# take a subset of columns
-	scores_to_write = all_model_scores[['set', 'model_name', 'EN-MEN-TR-3k_correlation', 'EN-WS-353-SIM_correlation', 'asym_rho', 'nelson_norms_correlation']]
+	scores_to_write = all_model_scores[[ 'model_name', 'set', 'EN-SL-999_correlation', 'EN-WS-353-SIM_correlation', 'nelson_norms_correlation','asym_rho']]
 
-	for col in ['EN-MEN-TR-3k_correlation', 'EN-WS-353-SIM_correlation', 'asym_rho', 'nelson_norms_correlation']:
+	for col in ['EN-SL-999_correlation', 'EN-WS-353-SIM_correlation', 'asym_rho', 'nelson_norms_correlation']:
 	
 		scores_to_write[col] = np.round(scores_to_write[col], 2)
 	
-	scores_to_write = scores_to_write.sort_values(by=['set', 'model_name'])
+	scores_to_write = scores_to_write.sort_values(by=['model_name','set'])
 	
 	return(scores_to_write)
 
