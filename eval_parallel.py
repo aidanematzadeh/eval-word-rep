@@ -15,6 +15,19 @@ import process
 import evaluate
 import memory
 
+def rescale(values,
+    lower_range=0.1, upper_range=1.0):
+
+    print('Rescaling from', lower_range,
+          'to', upper_range)
+    
+    diff = upper_range - lower_range
+
+    vmin = np.min(values)
+    vmax = np.max(values)
+
+    return ((diff * (values-vmin)) / (vmax-vmin)) + lower_range
+
 def eval_model_worker(args):    
 
     model_ctrl, ctrl, norms, index = args
@@ -175,6 +188,8 @@ def score_model_worker(args):
 if __name__ == "__main__":
     argparser = argparse.ArgumentParser()
     argparser.add_argument("--ctrl", type=str, help="name of .ctrl json")
+    argparser.add_argument("--n_jobs", type=int, default=1,
+        help="number of jobs to run in parallel (-1 to use all cores; 0 to infer based on model count)")
     args = argparser.parse_args()
 
     print('Loading control .json')
@@ -213,13 +228,12 @@ if __name__ == "__main__":
     for similarity_dataset in ctrl['similarity_datasets']:
         print('Loading '+similarity_dataset+'...')
         similarity_dataset_path = os.path.join(ctrl['similarityDatasetsPath'],similarity_dataset+'.txt')                
-        sim_df = pd.read_table(similarity_dataset_path, header=None)        
+        sim_df = pd.read_table(similarity_dataset_path, header=None)
         if sim_df.shape[1] != 3:
             sim_df = pd.read_table(similarity_dataset_path, header=None, sep=' ')
         sim_df.columns = ['cue','target','value']
 
-        if np.any(sim_df.value ==0):
-            sim_df.value = sim_df.value + 10**-10 #smoothing
+        sim_df.value = rescale(sim_df.value.values)
 
         similarity_datasets[similarity_dataset] = {}
         for record in sim_df.to_dict('records'):
@@ -250,15 +264,22 @@ if __name__ == "__main__":
     
     print('Retrieving similarities for %s models' % len(ctrl['models']))
     inputs = [(ctrl['models'][x], ctrl, retrieval_list, x) for x in range(len(ctrl['models']))] 
-
-    # num_cores = multiprocessing.cpu_count() // 2
-    num_cores = 24 #increasing this to any reasonable value causes a memory error on Chompsky
-
-    # [ ] replace references to norms with "retrievalList" in process.py
     
-    print('Multiprocessing with %s cores' % num_cores)
-    #par_results = Parallel(n_jobs=num_cores)(delayed(eval_model_worker)(i) for i in inputs)
-    par_results = [eval_model_worker(i) for i in inputs]
+    if args.n_jobs == -1:  # use all cores
+        num_cores = multiprocessing.cpu_count()
+    elif args.n_jobs == 0: # allocate one core for each model
+        num_cores = len(ctrl['models'])
+    else:
+        num_cores = args.n_jobs
+
+    # [ ] replace references to norms with "retrievalList" in process.py    
+    
+    if num_cores > 1:
+        print('Multiprocessing with %s cores' % num_cores)    
+        par_results = Parallel(n_jobs=num_cores)(delayed(eval_model_worker)(i) for i in inputs)
+    else: # no need for joblib
+        print('Serial processing with 1 core')    
+        par_results = [eval_model_worker(i) for i in inputs]
 
     memory.memoryCheckpoint(1, 'main')
 
@@ -313,9 +334,12 @@ if __name__ == "__main__":
 
     memory.memoryCheckpoint(6, 'main')
 
-    print('Scoring models in parallel')
-    #par_scores = Parallel(n_jobs=num_cores)(delayed(score_model_worker)(i) for i in score_inputs)
-    par_scores = [score_model_worker(i) for i in score_inputs]
+    if num_cores > 1:
+        print('Scoring models in parallel')
+        par_scores = Parallel(n_jobs=num_cores)(delayed(score_model_worker)(i) for i in score_inputs)
+    else: # no need for joblib
+        print('Scoring models serially')
+        par_scores = [score_model_worker(i) for i in score_inputs]
 
     memory.memoryCheckpoint(7, 'main')
 
@@ -336,5 +360,3 @@ if __name__ == "__main__":
     score_df[correlation_columns + other_columns].to_csv(os.path.join(os.path.join(ctrl['resultsPath'],'model_scores.csv')),index=False)
     
     memory.memoryCheckpoint(9, 'main')
-
-
