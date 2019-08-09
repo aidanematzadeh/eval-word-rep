@@ -15,10 +15,10 @@ from matplotlib.ticker import FormatStrFormatter
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Produce the triangle inequality plots from the results.')
-    parser.add_argument('results_dir', type=str,
+    parser.add_argument('--results_dir', type=str,
                         help='the results directory')
-    parser.add_argument('output_img', type=str,
-                        help='the filename of the output plots (best as an SVG)')
+    parser.add_argument('--output_path', type=str,
+                        help='the filename of the output plots (should be a PDF)')
     return parser.parse_args()
 
 def main():
@@ -26,11 +26,11 @@ def main():
 
     namemap = collections.OrderedDict([
         ('Nelson Norms', 'norms'),
-        ('Topics', 'tasa-gibbslda'),
+        ('LDA', 'tasa-gibbslda'),
         ('Frequency', 'tasa-freq'),
         ('GloVe', 'tasa-glove'),
-        ('Word2Vec CBOW', 'tasa-cbow'),
-        ('Word2Vec Skip-gram', 'tasa-skipgram'),
+        ('Word2Vec \n CBOW', 'tasa-cbow'),
+        ('Word2Vec \n Skip-gram', 'tasa-skipgram'),
     ])
 
     print('Namemap: {}'.format(list(namemap.values())))
@@ -79,8 +79,10 @@ def main():
             curr_ax.set_xticks([xmax])
             curr_ax.tick_params(axis='both', which='major', labelsize=5)
 
+    fig = matplotlib.pyplot.gcf()
+    fig.set_size_inches(6,4)
     plt.show()
-    plt.savefig(args.output_img)
+    plt.savefig(args.output_path, format='pdf')
 
 if __name__ == '__main__':
     main()
