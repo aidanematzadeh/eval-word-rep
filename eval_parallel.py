@@ -10,6 +10,7 @@ import multiprocessing
 import joblib
 from joblib import Parallel, delayed
 import sys
+import copy
 
 import process
 import evaluate
@@ -30,7 +31,7 @@ def rescale(values,
 
 def eval_model_worker(args):    
 
-    model_ctrl, ctrl, norms, index = args
+    model_ctrl, ctrl, retrieval_list, index = args
     print('Evaluating model:')
     print(model_ctrl)
 
@@ -39,7 +40,7 @@ def eval_model_worker(args):
         w2v_bin, w2v_cond = process.get_w2v(
             w2vcos_pickle = os.path.join(ctrl['cachePath'],model_ctrl['path']+'_cos.pickle'),
             w2vcond_pickle = os.path.join(ctrl['cachePath'],model_ctrl['path']+'_cond.pickle'),
-            norms = norms,
+            norms = retrieval_list,
             w2v_path = os.path.join(ctrl['dataPath'], model_ctrl['path'],'model'),
             flavor = model_ctrl['flavor'],
             cond_eq = model_ctrl['condEq'],
@@ -55,7 +56,7 @@ def eval_model_worker(args):
             glovecos_pickle = os.path.join(ctrl['cachePath'],model_ctrl['path']+'_cos.pickle'),
             glovecond_pickle = os.path.join(ctrl['cachePath'],model_ctrl['path']+'_cond.pickle'),
             glove_path = os.path.join(ctrl['dataPath'], model_ctrl['path'],'vectors.txt'),
-            norms = norms,
+            norms = retrieval_list,
             cond_eq = model_ctrl['condEq'],
             writePickle=True,
             regeneratePickle=model_ctrl['overwriteCache'] == 1)
@@ -68,7 +69,7 @@ def eval_model_worker(args):
         gibbslda = process.get_gibbslda_avg(
             gibbslda_pickle = os.path.join(ctrl['cachePath'],model_ctrl['path']+'_gibbslda.pickle'),
             beta = 0.01,
-            norms = norms,
+            norms = retrieval_list,
             vocab_path = os.path.join(ctrl['dataPath'],model_ctrl['path'],model_ctrl['vocab_path']),
             lambda_path  = os.path.join(ctrl['dataPath'],model_ctrl['path'], model_ctrl['lambda_path']),
             writePickle=True,
@@ -110,7 +111,7 @@ def score_model_worker(args):
         rd['associations']['nelson_norms'] = model_associations
         #!!! need to make sure norms are the first "model" that gets processed
 
-    # bad interaction of the for loop with the norms as special case -- norms are missing key values
+        # bad interaction of the for loop with the norms as special case -- norms are missing key values
     else:        
        for similarity_dataset in similarity_datasets.keys():           
             model_associations = process.get_pair_scores(scores, allpairs[similarity_dataset])
@@ -126,6 +127,16 @@ def score_model_worker(args):
                 sim = similarity_datasets[similarity_dataset]
                 dataset_associations = np.array([sim[pair[0]][pair[1]] for pair in pairs])
                 
+                if any(np.isnan(dataset_associations)):
+                    print('nans in dataset associations')
+                    import pdb
+                    pdb.set_trace()
+                if any(np.isnan(model_associations)):
+                    print('nans in model associations')
+                    import pdb
+                    pdb.set_trace()
+
+
                 rho = evaluate.rank_correlation(dataset_associations, model_associations)[0]
                 #evaluate.rank_correlation(['associations'], model_associations)[0]                
 
@@ -141,6 +152,7 @@ def score_model_worker(args):
     
     if stype == 'norms': # !!! these are not reached in the initial evaluation of the norms
         #median rank is taken on just the items in target set
+        print('Sorting within score_model_worker')
         scores_sorted = evaluate.sort_pairs(scores, allpairs[similarity_dataset])
     else:
         # longer median rank computation -- all norms and cues
@@ -182,14 +194,14 @@ def score_model_worker(args):
             rd['scores']['asym_rho'] = 1
         else:
             rd['scores']['asym_rho'] = evaluate.rank_correlation(norms_assoc['asyms'], asyms['ratio'])[0]
-
+    
     return(rd)
 
 if __name__ == "__main__":
     argparser = argparse.ArgumentParser()
     argparser.add_argument("--ctrl", type=str, help="name of .ctrl json")
     argparser.add_argument("--n_jobs", type=int, default=1,
-        help="number of jobs to run in parallel (-1 to use all cores; 0 to infer based on model count)")
+        help="number of jobs to run in parallel (-1 to use all cores; 0 to run in serial to allow pdb usage)")
     args = argparser.parse_args()
 
     print('Loading control .json')
@@ -220,9 +232,9 @@ if __name__ == "__main__":
     print('Getting norms...')
     norms = process.get_norms(ctrl['norms_pickle'], ctrl['norms_raw'], ('norms_pickle' in ctrl['regenerate']))
     #norms are cached at data/norms while the derived tuples are stored in cached/norms
-    
-    print('Augmenting norms with other similarity datasets')
-    retrieval_list = norms.copy()
+ 
+    print('Loading all similarity datasets and building a joint retrieval list')
+    retrieval_list = copy.deepcopy(norms)
     
     similarity_datasets = {}
     for similarity_dataset in ctrl['similarity_datasets']:
@@ -233,6 +245,7 @@ if __name__ == "__main__":
             sim_df = pd.read_table(similarity_dataset_path, header=None, sep=' ')
         sim_df.columns = ['cue','target','value']
 
+        # SM commenting in on 6/6
         sim_df.value = rescale(sim_df.value.values)
 
         similarity_datasets[similarity_dataset] = {}
@@ -241,10 +254,10 @@ if __name__ == "__main__":
                 if record['target'] in retrieval_list[record['cue']]:
                     pass # already retrieved
                 else:
-                    retrieval_list[record['cue']][record['target']] = record['value']                
+                    retrieval_list[record['cue']][record['target']] = None  #these are set to None because they form the list             
             else:
                 retrieval_list[record['cue']] = {}
-                retrieval_list[record['cue']][record['target']] = record['value']
+                retrieval_list[record['cue']][record['target']] = None
 
             if record['cue'] in similarity_datasets[similarity_dataset]:
                 similarity_datasets[similarity_dataset][record['cue']][record['target']] = record['value']
@@ -253,6 +266,8 @@ if __name__ == "__main__":
                 similarity_datasets[similarity_dataset][record['cue']][record['target']] = record['value']
     
     similarity_datasets['nelson_norms'] = norms.copy()               
+    # similarity_datasets has the pairs for each individual similarity dataset
+    # retrieval list includes the superset -- if that item is on any similarity dataset
 
     cue_target_pairs = []
     for cue in retrieval_list.keys():
@@ -267,8 +282,8 @@ if __name__ == "__main__":
     
     if args.n_jobs == -1:  # use all cores
         num_cores = multiprocessing.cpu_count()
-    elif args.n_jobs == 0: # allocate one core for each model
-        num_cores = len(ctrl['models'])
+    elif args.n_jobs == 0: # run the model in seriall
+        num_cores = 0
     else:
         num_cores = args.n_jobs
 
@@ -281,6 +296,7 @@ if __name__ == "__main__":
         print('Serial processing with 1 core')    
         par_results = [eval_model_worker(i) for i in inputs]
 
+    print('confirm we get past eval_model_worker')
     memory.memoryCheckpoint(1, 'main')
 
     evallist = list(itertools.chain.from_iterable(par_results))
@@ -358,5 +374,5 @@ if __name__ == "__main__":
     other_columns = ['model_id','asym_rho', 'median_found_rank_0', 'median_found_rank_1', 'median_found_rank_2', 'median_max_rank_0', 'median_max_rank_1', 'median_max_rank_2']    
     
     score_df[correlation_columns + other_columns].to_csv(os.path.join(os.path.join(ctrl['resultsPath'],'model_scores.csv')),index=False)
-    
+
     memory.memoryCheckpoint(9, 'main')

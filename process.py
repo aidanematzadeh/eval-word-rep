@@ -48,7 +48,7 @@ def load_scores(path):
     return scores
 
 
-def get_norms(norms_pickle, norms_path=None, regeneratePickle=False):
+def get_norms(norms_pickle, norms_path=None, regeneratePickle=True):
     """ Read Nelson norms for the evaluation methods.
     If a pickle file exists, load and return the norms. Otherwise, read the
     norms from the dir and write a pickle file to norms_pickle.
@@ -59,7 +59,7 @@ def get_norms(norms_pickle, norms_path=None, regeneratePickle=False):
         return load_scores(norms_pickle)
 
     else:
-        print('Regenerating norms pickle')
+        print('Regenerating norms pickle...')
         # The value of zero means that the norms[cue][target] does not exist.
         norms = {}
         for filename in glob.glob(os.path.join(norms_path, '*.bin')):
@@ -475,8 +475,10 @@ def get_allpairs(allpairs_pickle, norms, cbow=None, sg=None, lda=None, glove=Non
     Nelson norms, cbow, and LDA.
     """
     if os.path.exists(allpairs_pickle) and not regeneratePickle:
+        print('Loading allpairs froma  pickle')
         return load_scores(allpairs_pickle)
 
+    print('Regenerating allpairs')
     allpairs, normpairs = [], []
     for cue in norms:
         for target in norms[cue]:
@@ -550,6 +552,7 @@ def get_pair_scores(scores, allpairs):
 def get_asym_pairs(norms, allpairs):
     """ Return the pairs for which both p(target|cue) and P(cue|target) exist.
     """
+    print("asym_pairs_test")
     assym_pairs = set()
     for cue, target in allpairs:
         if not (cue in norms and target in norms[cue]):

@@ -1,11 +1,11 @@
 {
   "runname": "emnlp",
-  "dataPath": "/shared_hd1/word-representations/data",
-  "cacheDir": "/shared_hd1/word-representations/results/emnlp/cached",
-  "resultsDir": "/shared_hd1/word-representations/results/emnlp/results",
-  "normsPath": "/shared_hd1/word-representations/norms",
-  "similarityDatasetsPath": "/home/stephan/notebooks/embedding-evaluation/wordsim/data/en ",
-  "similarity_datasets": ["EN-MC-30", "EN-MEN-TR-3k",  "EN-MTurk-287",  "EN-MTurk-771",  "EN-RG-65",  "EN-RW-STANFORD",  "EN-WS-353-ALL",  "EN-WS-353-REL",  "EN-WS-353-SIM",  "EN-YP-130"],
+  "dataPath": "/usr/people/smeylan/network_storage/word-representations/data",
+  "cacheDir": "/usr/people/smeylan/network_storage/word-representations/cached",
+  "resultsDir": "/usr/people/smeylan/network_storage/word-representations/results",
+  "normsPath": "/usr/people/smeylan/network_storage/word-representations/data/nelson_norms",
+  "similarityDatasetsPath": "/usr/people/smeylan/network_storage/word-representations/eval_datasets",
+  "similarity_datasets": ["EN-MC-30", "EN-MEN-TR-3k",  "EN-MTurk-287",  "EN-MTurk-771",  "EN-RG-65",  "EN-RW-STANFORD",  "EN-WS-353-ALL",  "EN-WS-353-REL",  "EN-WS-353-SIM",  "EN-YP-130"], 
   "models": [     
     {"path": "wiki-skipgram", "type": "w2v", "overwriteCache": 0, "condEq": "eq1", "flavor": "gensim"},
     {"path": "wiki-cbow", "type": "w2v", "overwriteCache": 0, "condEq": "eq1","flavor": "gensim"},
@@ -26,5 +26,5 @@
     {"path": "cbowe79_alpha0.75", "type": "w2v", "overwriteCache": 0, "condEq": "eq1", "flavor":"keyed_text"},
     {"path": "cbowe39_alpha0.5", "type": "w2v", "overwriteCache": 0, "condEq": "eq1", "flavor":"keyed_text"}    
   ],
-  "regenerate": []
+  "regenerate": ["norms_pickle","allpairs", "asympairs", "tuples"]
 }
